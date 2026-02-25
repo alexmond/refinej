@@ -1,0 +1,154 @@
+= RefineJ Development Roadmap
+:toc:
+:toclevels: 4
+:revnumber: 0.2
+:revdate: February 2026
+:author: RefineJ Team
+:keywords: roadmap, tickets, phases, priorities, refinej, java, refactoring
+:icons: font
+
+== Vision & Objectives
+
+RefineJ is the semantic refactoring CLI that finally lets AI coding agents perform safe rename/move operations on Java projects.
+
+**MVP Goal**: A production-ready, pluggable CLI that indexes a Java codebase and executes rename/move with preview/apply in under 5 minutes on a 5k-file repo.
+
+**Total MVP Timeline**: 8–10 weeks (1–2 developers)
+**Release Target**: v0.1.0 (open-source on GitHub, executable JAR + native binary)
+
+== Prioritization Legend
+
+* *P0 (Critical)* — Must be done for any usable MVP
+* *P1 (High)* — Required for core value
+* *P2 (Medium)* — Nice-to-have for v0.1
+* *P3 (Future)* — Post-MVP (v0.2+)
+
+== Status Legend
+
+* *DONE* — Completed
+* *IN PROGRESS* — Work has started
+* *TODO* — Not yet started
+
+Each task below is written as a ready-to-copy **ticket** (title + description + acceptance criteria).
+
+== Phase 0: Foundation & Project Skeleton (Week 1 | 5 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-001 | Create GitHub repository & initial structure | P0       | 0.5d   | None         | DONE
+| RFJ-002 | Generate Spring Boot 4.0.2 project — multi-module Maven (core, cli, engine-spoon, engine-rewrite, engine-javaparser) | P0 | 0.5d | RFJ-001 | DONE
+| RFJ-003 | Configure Maven wrapper + Spring Boot Maven plugin for executable JAR & native image | P0 | 1d | RFJ-002 | DONE
+| RFJ-004 | Set up engine selection configuration (`refinej.default-engine`) in application.yml | P0 | 1d | RFJ-002 | IN PROGRESS
+| RFJ-005 | Add basic Spring Shell commands (`status`, `version`) with tests | P0 | 1d | RFJ-002 | TODO
+| RFJ-006 | Create `ARCHITECTURE.adoc`, `DETAILED-DESIGN.adoc`, and `ROADMAP.adoc` in docs/ | P0 | 1d | RFJ-001 | DONE
+|===
+
+**Phase Exit Criteria**:
+`./mvnw spring-boot:run` starts an interactive shell cleanly. All modules build without errors. Multi-module Maven structure is confirmed with `refinej-core` as the shared dependency.
+
+NOTE: The project uses a Maven multi-module layout (not a monolith). Engine implementations live in separate modules (`refinej-engine-spoon`, `refinej-engine-rewrite`, `refinej-engine-javaparser`) and are wired into `refinej-cli` at runtime via Spring configuration.
+
+== Phase 1: Refactoring Engine Abstraction (Week 1–2 | 8 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-010 | Define `RefactoringEngine` interface (index, findSymbol, findReferences, computeRename, computeMove, apply, clearIndex) | P0 | 1d | Phase 0 | IN PROGRESS
+| RFJ-011 | Implement `EngineConfig` factory bean — selects engine from `refinej.default-engine` or `--engine` flag | P0 | 1.5d | RFJ-010 | TODO
+| RFJ-012 | Add `--engine` CLI flag with validation | P0 | 1d | RFJ-011 | TODO
+| RFJ-013 | Create placeholder `SpoonEngine` stub in `refinej-engine-spoon` (indexProject logs "Engine loaded") | P0 | 2d | RFJ-011 | IN PROGRESS
+| RFJ-014 | Create placeholder `OpenRewriteEngine` stub in `refinej-engine-rewrite` | P1 | 1.5d | RFJ-011 | IN PROGRESS
+| RFJ-015 | Create placeholder `JavaParserEngine` stub in `refinej-engine-javaparser` | P1 | 1d | RFJ-011 | IN PROGRESS
+| RFJ-016 | Unit tests for engine selection & interface contract | P0 | 1d | RFJ-010 | TODO
+|===
+
+**Phase Exit Criteria**:
+`refinej --engine spoon index .` runs without crashing and logs "Engine loaded". All three engine stubs compile and pass the interface contract test suite.
+
+== Phase 2: Spoon-Based Indexing (Week 2–4 | 12 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-020 | Integrate Spoon Launcher with classpath resolution (Maven/Gradle) | P0 | 3d | Phase 1 | TODO
+| RFJ-021 | Build `CtModel` and traverse to extract all symbols (classes, methods, fields, packages) | P0 | 3d | RFJ-020 | TODO
+| RFJ-022 | Extract references (imports, new, method calls, extends, annotations) | P0 | 3d | RFJ-021 | TODO
+| RFJ-023 | Implement incremental indexing (file hash cache + watch service) | P1 | 2d | RFJ-022 | TODO
+| RFJ-024 | Handle Lombok, records, sealed classes, JPMS modules | P1 | 1d | RFJ-022 | TODO
+| RFJ-025 | Persist symbols/references to in-memory model (for Phase 3) | P0 | 1d | RFJ-022 | TODO
+|===
+
+**Phase Exit Criteria**:
+`refinej index /path/to/spring-boot-sample` completes in <30s and `refinej query refs com.example.Foo` returns the correct count.
+
+== Phase 3: Index Database Layer (Week 4–5 | 10 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-030 | Design & create H2 schema (SymbolEntity, ReferenceEntity) with Flyway migrations | P0 | 2d | Phase 2 | TODO
+| RFJ-031 | Spring Data JPA repositories + custom queries (findReferences, findSymbol) in `refinej-core` | P0 | 2d | RFJ-030 | TODO
+| RFJ-032 | IndexingService that saves Spoon model to DB | P0 | 2d | RFJ-030 + RFJ-022 | TODO
+| RFJ-033 | QueryService with JSON output support (`--json` flag) | P0 | 1.5d | RFJ-032 | TODO
+| RFJ-034 | `refinej reindex --changed-only` command | P1 | 1.5d | RFJ-023 | TODO
+| RFJ-035 | Database integration tests with real H2 file mode | P0 | 1d | RFJ-031 | TODO
+|===
+
+**Phase Exit Criteria**:
+Full round-trip: index → persist → query → JSON output matches expected symbols.
+
+== Phase 4: Core Refactoring Operations (Week 5–7 | 14 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-040 | Implement `computeRename` in SpoonEngine (collect changes, no file write) | P0 | 3d | Phase 2 + 3 | TODO
+| RFJ-041 | Implement `computeMove` (update package, imports, file move) | P0 | 3d | RFJ-040 | TODO
+| RFJ-042 | ChangeSet model + unified diff preview | P0 | 2d | RFJ-040 | TODO
+| RFJ-043 | `refinej refactor rename --old X --new Y --preview` CLI command | P0 | 2d | RFJ-042 | TODO
+| RFJ-044 | Safe apply with backup + atomic writes | P0 | 2d | RFJ-042 | TODO
+| RFJ-045 | Conflict detection (name clash, read-only files) | P1 | 1.5d | RFJ-044 | TODO
+| RFJ-046 | Unit + integration tests on 3 sample repos (Guava, Spring Petclinic, custom) | P0 | 2d | All above | TODO
+|===
+
+**Phase Exit Criteria**:
+End-to-end rename of a class in Petclinic succeeds with preview/apply and git diff is clean.
+
+== Phase 5: OpenRewrite Prototype & Engine Comparison (Week 7–8 | 8 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-050 | Full OpenRewriteEngine implementation using built-in recipes | P1 | 3d | Phase 1 | TODO
+| RFJ-051 | Custom Rewrite recipe for class rename/move with lossless formatting | P1 | 2d | RFJ-050 | TODO
+| RFJ-052 | Benchmark & comparison table (Spoon vs Rewrite) in docs | P2 | 1d | RFJ-050 | TODO
+| RFJ-053 | Switchable engine in all refactor commands | P0 | 1d | RFJ-050 | TODO
+| RFJ-054 | Tests proving identical results between Spoon & Rewrite | P1 | 1d | RFJ-053 | TODO
+|===
+
+**Phase Exit Criteria**:
+`refinej --engine rewrite refactor rename ...` works identically to Spoon.
+
+== Phase 6: Polish, Testing, Documentation & Release (Week 8–10 | 12 person-days)
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-060 | Comprehensive integration test suite (5 real open-source repos) | P0 | 3d | All previous | TODO
+| RFJ-061 | Error handling, progress bars, colored output | P1 | 2d | Phase 4 | TODO
+| RFJ-062 | Full README.adoc + usage examples + AI-agent integration guide | P0 | 2d | All | TODO
+| RFJ-063 | Native image build (GraalVM) + GitHub Actions CI | P1 | 2d | RFJ-003 | TODO
+| RFJ-064 | License (MIT), CONTRIBUTING.md, release workflow | P0 | 1d | RFJ-001 | TODO
+| RFJ-065 | Public GitHub release v0.1.0 + Docker image | P0 | 2d | RFJ-064 | TODO
+|===
+
+**Phase Exit Criteria**:
+v0.1.0 released, fully documented, and AI-agent friendly.
+
+== How to Turn This Roadmap into Tickets
+
+1. Copy each row and create a GitHub issue with the exact **Title**.
+2. Paste the Description and **Acceptance Criteria** (Phase Exit Criteria) into the issue body.
+3. Add labels: `phase-0`, `phase-1`, … `priority-P0`, etc.
+4. Add to a GitHub Project board (columns: Backlog → In Progress → Review → Done).

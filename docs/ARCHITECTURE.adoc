@@ -1,0 +1,230 @@
+= RefineJ Architecture
+:toc:
+:toclevels: 3
+:revnumber: 0.2
+:revdate: February 2026
+:author: RefineJ Team
+:keywords: java, refactoring, cli, spoon, openrewrite, spring-boot, ai-coding-agents
+:icons: font
+
+== Overview
+
+**Semantic Refactoring Engine for Java**
+
+CLI tool + index database that makes AI coding agents finally reliable at rename/move operations.
+
+*CLI command:* `refinej`
+
+== 1. Project Overview
+
+=== 1.1 Purpose
+
+RefineJ is a lightweight, Spring Boot-powered CLI tool that:
+
+* Indexes any Java codebase into a fast, semantic database.
+* Enables safe, precise refactoring (rename/move classes, methods, fields, packages).
+* Provides clean JSON output so AI coding agents (Cursor, Aider, Claude, etc.) can query references and apply changes without breaking the project.
+
+It solves the #1 pain point of current AI agents: they treat refactoring as text search/replace instead of semantic graph operations.
+
+=== 1.2 MVP Scope
+
+* Java 21+ support (records, sealed classes, pattern matching, modules)
+* Index + query + refactor (rename class/method/field, move class/package)
+* Preview (diff), conflict detection, atomic apply with backup
+* Maven & Gradle multi-module support (classpath resolution)
+* Pluggable refactoring engines (3 prototypes: Spoon, OpenRewrite, JavaParser)
+* Spring Boot CLI (interactive + scriptable)
+
+*Out of scope for MVP:* GUI, multi-language, extract-method, full IDE integration.
+
+=== 1.3 Non-Functional Requirements
+
+* Handles repos up to ~10k Java files
+* Incremental re-indexing (file watch + hash)
+* 100% safe by default (dry-run first)
+* Zero external services (fully offline)
+* Executable JAR + native image support (GraalVM)
+
+== 2. High-Level Architecture
+
+[mermaid]
+----
+flowchart TD
+    A[CLI Layer<br>Spring Shell] --> B[Command Handlers<br>Spring @ShellComponent]
+    B --> C[Services Layer<br>IndexingService + RefactoringService]
+    C --> D[Refactoring Engine<br>(pluggable: Spoon / OpenRewrite / JavaParser)]
+    C --> E[Index Database<br>H2 embedded]
+    D --> F[File System<br>Source + Backup]
+    C --> G[AI Integration<br>JSON output / REST (future)]
+----
+
+=== Layers
+
+[cols="1,2,1",options="header"]
+|===
+| Layer                | Responsibility                              | Technologies
+| CLI                  | User commands & interactive shell           | Spring Shell 3.4+
+| Command Handlers     | Validation, orchestration                   | Spring Beans
+| Services             | Business logic                              | Spring @Service
+| Refactoring Engine   | Parsing, semantic analysis, transformations | Spoon / OpenRewrite / JavaParser
+| Index Database       | Persistent symbol & reference store         | H2 + Spring Data JPA
+| Utilities            | Diff, backup, classpath resolution          | Apache Commons, Maven Resolver
+|===
+
+== 3. Technology Stack
+
+* *Core Framework:* Spring Boot 4.0.2 (starter-shell, starter-data-jpa, starter-validation)
+* *CLI:* Spring Shell 3.4+ (`@ShellMethod`, `@ShellComponent`)
+* *Java:* 21 (minimum)
+* *Database:* H2 (embedded file mode) + Spring Data JPA + Flyway (migrations)
+* *Build Tool:* Maven multi-module (Spring Boot Maven Plugin → executable JAR + native)
+* *Refactoring Prototypes:* See Section 4
+* *Utilities:* Lombok, Apache Commons IO / DiffUtils, Maven Resolver / Gradle Tooling API, SLF4J + Logback
+* *Testing:* JUnit 5 + integration tests on real Maven/Gradle projects
+
+== 4. Multi-Module Project Structure
+
+The project is organized as a Maven multi-module build. Each engine is an independent module so the core and CLI have no hard compile-time dependency on any specific engine implementation.
+
+[mermaid]
+----
+graph TD
+    CLI[refinej-cli<br>Spring Boot app<br>Spring Shell commands<br>H2 / JPA / Flyway]
+    CORE[refinej-core<br>Domain model<br>Engine API interface<br>Services + Repositories]
+    SPOON[refinej-engine-spoon]
+    REWRITE[refinej-engine-rewrite]
+    JP[refinej-engine-javaparser]
+
+    CLI --> CORE
+    CLI --> SPOON
+    CLI --> REWRITE
+    CLI --> JP
+    SPOON --> CORE
+    REWRITE --> CORE
+    JP --> CORE
+----
+
+[cols="1,3",options="header"]
+|===
+| Module                    | Responsibility
+| `refinej-core`            | Domain records (`Symbol`, `Reference`, `ChangeSet`), `RefactoringEngine` interface, `IndexingService`, `QueryService`, `RefactoringService`, JPA repositories, utilities
+| `refinej-cli`             | `RefineJApplication`, Spring Shell commands, H2/JPA/Flyway configuration, executable JAR packaging
+| `refinej-engine-spoon`    | Spoon-based implementation of `RefactoringEngine`
+| `refinej-engine-rewrite`  | OpenRewrite-based implementation of `RefactoringEngine`
+| `refinej-engine-javaparser` | JavaParser-based implementation of `RefactoringEngine`
+|===
+
+All engine modules depend on `refinej-core` only. The `refinej-cli` module depends on all of them and selects the active engine at runtime via configuration or the `--engine` flag.
+
+== 5. Refactoring Engine Prototypes
+
+All engines implement the same interface (`org.alexmond.refinej.core.engine.api.RefactoringEngine`):
+
+[source,java]
+----
+public interface RefactoringEngine {
+    EngineType getType();
+    void indexProject(Path root, BuildType buildType);
+    Optional<Symbol> findSymbol(String qualifiedName);
+    List<Reference> findReferences(Symbol symbol);
+    ChangeSet computeRename(Symbol oldSymbol, String newQualifiedName);
+    ChangeSet computeMove(Symbol symbol, String newPackageName);
+    void apply(ChangeSet changes, boolean dryRun);
+    void clearIndex();
+}
+----
+
+=== 5.1 Prototype 1 – Spoon (Recommended for MVP)
+
+*Why:* Best semantic model (CtModel), excellent symbol resolution, mutable AST.
+*Key classes:* `SpoonEngine`, custom `RenameProcessor`, `MoveProcessor`.
+*Classpath:* `Launcher` + Maven/Gradle classpath loader.
+*Pros:* Highest accuracy on inheritance, generics, annotations.
+*Cons:* Higher memory usage.
+
+=== 5.2 Prototype 2 – OpenRewrite (Best for batch & production)
+
+*Why:* Purpose-built for automated refactoring, lossless formatting/comments.
+*Usage:* Built-in recipes (`ChangeType`, `ChangePackage`) + custom recipes.
+*Pros:* Battle-tested at scale, YAML recipe config, GitHub Actions friendly.
+*Cons:* Slightly less flexible for interactive queries.
+
+=== 5.3 Prototype 3 – JavaParser + JavaSymbolSolver (Lightweight baseline)
+
+*Why:* Minimal footprint, fast for small-to-medium repos.
+*Usage:* AST visitors + `CombinedTypeSolver`.
+*Pros:* Tiny binary size.
+*Cons:* More manual work for complex semantics.
+
+*Switching engines:*
+
+[source,bash]
+----
+refinej --engine spoon index ...
+# or in application.yml: refinej.default-engine=rewrite
+----
+
+== 6. Index Database Schema (H2)
+
+[source,sql]
+----
+-- Symbols
+CREATE TABLE symbol (
+    id              BIGINT PRIMARY KEY,
+    kind            VARCHAR(20) NOT NULL, -- CLASS, METHOD, FIELD, PACKAGE
+    simple_name     VARCHAR(255),
+    qualified_name  VARCHAR(1000) UNIQUE,
+    file_path       VARCHAR(1000),
+    line_start      INT,
+    line_end        INT,
+    type_fqn        VARCHAR(1000) -- for fields/methods
+);
+
+-- References
+CREATE TABLE reference (
+    id              BIGINT PRIMARY KEY,
+    symbol_id       BIGINT REFERENCES symbol(id),
+    file_path       VARCHAR(1000),
+    line            INT,
+    column          INT,
+    usage_kind      VARCHAR(20) -- IMPORT, NEW, METHOD_CALL, EXTENDS, etc.
+);
+----
+
+Spring Data JPA entities: `SymbolEntity`, `ReferenceEntity` with repositories — defined in `refinej-core`, configured and migrated (Flyway) from `refinej-cli`.
+
+== 7. CLI Commands (MVP)
+
+[source,bash]
+----
+refinej index /path/to/project [--engine spoon]
+refinej query refs com.example.MyClass
+refinej refactor rename --old com.old.Foo --new com.new.Bar --preview
+refinej refactor move --class com.example.Foo --to com.new.package
+refinej status
+refinej reindex --changed-only
+----
+
+All commands support `--json` for AI agent consumption.
+
+== 8. Integration with AI Coding Agents
+
+Agents can:
+
+. Call `refinej query refs ... --json` before suggesting code.
+. Ask RefineJ to compute a ChangeSet.
+. Let RefineJ apply (safe, with preview).
+
+*Future:* lightweight REST endpoint (`/api/query`, `/api/refactor`).
+
+== 9. Risks & Mitigations
+
+* *Accuracy* → Extensive test suite on Guava, Spring Boot, OpenJDK samples
+* *Performance* → Incremental indexing + caching
+* *Classpath hell* → Use Maven Resolver + Gradle Tooling API
+* *Lombok / annotation processors* → Delombok step or Spoon delombok support
+
+== 10. Development Roadmap
+
+See link:ROADMAP.adoc[ROADMAP.adoc] for the full phased plan with tickets and acceptance criteria.

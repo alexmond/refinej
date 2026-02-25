@@ -1,0 +1,47 @@
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.2</version>
+    </parent>
+
+    <groupId>org.alexmond.refinej</groupId>
+    <artifactId>refinej-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>RefineJ Parent</name>
+
+    <modules>
+        <module>refinej-core</module>
+        <module>refinej-cli</module>
+        <module>refinej-engine-spoon</module>
+        <module>refinej-engine-rewrite</module>
+        <module>refinej-engine-javaparser</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <spoon.version>10.4.0</spoon.version>
+        <openrewrite.version>8.73.2</openrewrite.version>
+        <javaparser.version>3.25.8</javaparser.version>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

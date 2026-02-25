@@ -1,0 +1,326 @@
+= RefineJ Detailed Design Document
+:toc:
+:toclevels: 4
+:revnumber: 0.2
+:revdate: February 2026
+:author: RefineJ Team
+:keywords: detailed design, refinej, java, refactoring, spoon, openrewrite, spring-boot, h2, jpa
+:icons: font
+
+== 1. Introduction
+
+This document provides the **complete technical design specification** for RefineJ — the semantic refactoring CLI for Java.
+
+It expands on the high-level link:ARCHITECTURE.adoc[ARCHITECTURE.adoc] and the link:ROADMAP.adoc[ROADMAP.adoc].
+
+**Purpose**: Serve as the single source of truth for any developer or AI coding agent implementing the system.
+
+**Scope**: MVP (v0.1.0) — Java-only, rename/move operations, Spoon primary engine, OpenRewrite prototype.
+
+**Assumptions**:
+* Runtime: Java 21 (minimum)
+* Framework: Spring Boot 4.0.2
+* Primary engine: Spoon (highest semantic accuracy)
+* Database: Embedded H2
+* Build: Maven multi-module
+
+== 2. Domain Model
+
+=== 2.1 Core Domain Objects (Plain Java)
+
+Defined in `refinej-core` under `org.alexmond.refinej.core.domain`.
+
+[source,java]
+----
+public enum SymbolKind {
+    CLASS, METHOD, FIELD, PACKAGE, PARAMETER, LOCAL_VARIABLE
+}
+
+public record Symbol(
+    Long id,
+    SymbolKind kind,
+    String simpleName,
+    String qualifiedName,
+    String filePath,
+    int lineStart,
+    int lineEnd,
+    String typeFqn               // for fields/method returns
+) {}
+
+public record Reference(
+    Long id,
+    Symbol symbol,
+    String filePath,
+    int line,
+    int column,
+    UsageKind usageKind
+) {}
+
+public enum UsageKind {
+    IMPORT, NEW_INSTANCE, METHOD_CALL, EXTENDS, IMPLEMENTS,
+    ANNOTATION, TYPE_REFERENCE, FIELD_ACCESS
+}
+
+public record ChangeSet(
+    List<FileChange> changes,
+    List<Conflict> conflicts,
+    boolean dryRun
+) {}
+
+public record FileChange(
+    Path filePath,
+    String originalContent,
+    String newContent,
+    String unifiedDiff
+) {}
+
+public record Conflict(
+    String description,
+    Path filePath,
+    int line
+) {}
+----
+
+=== 2.2 JPA Persistence Entities
+
+Defined in `refinej-core` under `org.alexmond.refinej.core.repository`. The JPA/H2 configuration and Flyway migrations are bootstrapped from `refinej-cli`.
+
+[source,java]
+----
+@Entity
+@Table(name = "symbol")
+@Cacheable
+public class SymbolEntity {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Enumerated(EnumType.STRING)
+    private SymbolKind kind;
+
+    private String simpleName;
+    @Column(unique = true, length = 1000)
+    private String qualifiedName;
+
+    private String filePath;
+    private Integer lineStart;
+    private Integer lineEnd;
+    private String typeFqn;
+
+    @OneToMany(mappedBy = "symbol", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<ReferenceEntity> references = new HashSet<>();
+}
+
+@Entity
+@Table(name = "reference")
+public class ReferenceEntity {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "symbol_id")
+    private SymbolEntity symbol;
+
+    private String filePath;
+    private Integer line;
+    private Integer column;
+
+    @Enumerated(EnumType.STRING)
+    private UsageKind usageKind;
+}
+----
+
+== 3. Core Interfaces
+
+=== 3.1 RefactoringEngine (Pluggable Abstraction)
+
+Defined in `refinej-core` at `org.alexmond.refinej.core.engine.api.RefactoringEngine`.
+
+[source,java]
+----
+public interface RefactoringEngine {
+    EngineType getType();
+
+    void indexProject(Path projectRoot, BuildType buildType);
+
+    Optional<Symbol> findSymbol(String qualifiedName);
+    List<Reference> findReferences(Symbol symbol);
+    List<Reference> findReferencesInFile(Path filePath);
+
+    ChangeSet computeRename(Symbol oldSymbol, String newQualifiedName);
+    ChangeSet computeMove(Symbol symbol, String newPackageName);
+
+    void apply(ChangeSet changeSet, boolean dryRun);
+
+    void clearIndex(); // for reindex
+}
+----
+
+=== 3.2 Supporting Interfaces
+
+[source,java]
+----
+public enum EngineType { SPOON, OPENREWRITE, JAVAPARSER }
+
+public enum BuildType { MAVEN, GRADLE, UNKNOWN }
+
+public interface ClasspathResolver {
+    List<Path> resolve(Path projectRoot, BuildType buildType);
+}
+
+public interface ChangeApplier {
+    void backupAndApply(List<FileChange> changes, boolean dryRun);
+}
+----
+
+== 4. Multi-Module Package Structure
+
+The project uses a Maven multi-module layout. Each module has its own source tree under `org.alexmond.refinej.*`.
+
+[literal]
+----
+refinej-parent/
+├── refinej-core/                          # domain, API, services, repositories, utils
+│   └── src/main/java/org/alexmond/refinej/core/
+│       ├── domain/                        # Symbol, Reference, ChangeSet, enums
+│       ├── engine/api/                    # RefactoringEngine interface + supporting types
+│       ├── repository/                    # SymbolRepository, ReferenceRepository (JPA)
+│       ├── service/                       # IndexingService, QueryService, RefactoringService
+│       ├── config/                        # EngineConfig (factory / selection)
+│       ├── util/                          # ClasspathResolverImpl, DiffGenerator, FileBackupManager
+│       ├── exception/                     # RefactorException and subclasses
+│       └── model/                         # DTOs for JSON output (JsonDto, etc.)
+│
+├── refinej-cli/                           # Spring Boot entry point, Shell commands, DB config
+│   └── src/main/java/org/alexmond/refinej/cli/
+│       ├── RefineJApplication.java
+│       ├── commands/                      # RefactorCommands, IndexCommands, QueryCommands
+│       └── config/                        # DatabaseConfig, application.yml, Flyway migrations
+│
+├── refinej-engine-spoon/
+│   └── src/main/java/org/alexmond/refinej/engine/spoon/
+│       └── SpoonEngine.java
+│
+├── refinej-engine-rewrite/
+│   └── src/main/java/org/alexmond/refinej/engine/rewrite/
+│       └── OpenRewriteEngine.java
+│
+└── refinej-engine-javaparser/
+    └── src/main/java/org/alexmond/refinej/engine/javaparser/
+        └── JavaParserEngine.java
+----
+
+All three engine modules depend only on `refinej-core`. The `refinej-cli` module depends on all modules and wires them together via Spring configuration.
+
+== 5. Key Data Flows (Sequence Diagrams)
+
+=== 5.1 Indexing Flow
+
+[mermaid]
+----
+sequenceDiagram
+    participant CLI
+    participant IndexingService
+    participant RefactoringEngine
+    participant Parser
+    participant SymbolRepository
+
+    CLI->>IndexingService: index(projectRoot, engineName)
+    IndexingService->>RefactoringEngine: indexProject(...)
+    RefactoringEngine->>Parser: build full model (CtModel / LST)
+    Parser-->>RefactoringEngine: List<Symbol> + List<Reference>
+    RefactoringEngine->>SymbolRepository: saveAll(...)
+    SymbolRepository-->>IndexingService: success
+----
+
+=== 5.2 Rename Operation Flow
+
+[mermaid]
+----
+sequenceDiagram
+    participant CLI
+    participant RefactoringService
+    participant RefactoringEngine
+    participant SymbolRepository
+    participant ChangeApplier
+
+    CLI->>RefactoringService: computeRename(oldName, newName)
+    RefactoringService->>SymbolRepository: findByQualifiedName(oldName)
+    SymbolRepository-->>RefactoringService: Symbol
+    RefactoringService->>RefactoringEngine: computeRename(symbol, newName)
+    RefactoringEngine->>SymbolRepository: findReferences(symbol)
+    RefactoringEngine-->>RefactoringService: ChangeSet
+    CLI->>RefactoringService: apply(changeSet, dryRun)
+    RefactoringService->>ChangeApplier: backupAndApply(...)
+----
+
+== 6. Configuration (application.yml)
+
+Lives in `refinej-cli/src/main/resources/application.yml`.
+
+[source,yaml]
+----
+refinej:
+  default-engine: spoon
+  database:
+    url: jdbc:h2:file:./.refinej/index;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: sa
+  indexing:
+    incremental: true
+    parallel-threads: 8
+    ignore-patterns:
+      - "**/target/**"
+      - "**/build/**"
+      - "**/node_modules/**"
+  backup:
+    enabled: true
+    directory: .refinej/backups
+    keep-days: 7
+----
+
+== 7. Safety & Error Handling
+
+* All refactor operations are **dry-run by default**
+* `ChangeSet` always includes full preview diff
+* Conflicts are detected before any file write
+* Automatic backup using timestamped copies
+* Transactional DB writes (Spring `@Transactional`)
+* Graceful degradation on parse errors (skip file + log)
+
+== 8. Performance Targets (MVP)
+
+* Index 5 000-file repo: ≤ 60 seconds
+* Rename with 300 references: ≤ 8 seconds
+* Query any symbol: ≤ 50 ms
+* Memory peak: ≤ 1.2 GB for 10k-file repo
+
+== 9. Testing Strategy
+
+* Unit tests: high coverage (≥ 80%) on services and domain logic
+* Contract tests: same test suite runs against all three engines
+* Integration tests: real projects (Petclinic, Guava, Spring Framework subset)
+* Golden-master tests for ChangeSet diffs
+
+== 10. Extensibility
+
+* Add new engine: implement `RefactoringEngine` in a new Maven module, add as dependency to `refinej-cli`, register in `EngineConfig`
+* Add new operation: extend interface + add CLI command
+* Add new build system: extend `ClasspathResolver`
+
+== Appendix A: Example JSON Output for AI Agents
+
+[source,json]
+----
+{
+  "status": "success",
+  "operation": "rename",
+  "oldQualifiedName": "com.old.Foo",
+  "newQualifiedName": "com.new.Bar",
+  "filesAffected": 23,
+  "preview": {
+    "diff": "...unified diff...",
+    "summary": "23 files changed, 142 lines modified"
+  },
+  "conflicts": []
+}
+----

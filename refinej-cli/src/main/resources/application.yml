@@ -1,0 +1,18 @@
+
+refinej:
+  default-engine: spoon
+  database:
+    url: jdbc:h2:file:./.refinej/index;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: sa
+  indexing:
+    incremental: true
+    parallel-threads: 8
+    ignore-patterns:
+      - "**/target/**"
+      - "**/build/**"
+      - "**/node_modules/**"
+  backup:
+    enabled: true
+    directory: .refinej/backups
+    keep-days: 7
