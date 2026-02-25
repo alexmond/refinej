@@ -1,0 +1,15 @@
+# Maven
+target/
+.mvn/timing.properties
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# RefineJ runtime index & backups
+.refinej/
+
+# OS
+.DS_Store
