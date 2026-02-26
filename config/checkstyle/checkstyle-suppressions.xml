@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+    "-//Checkstyle//DTD SuppressionFilter Configuration 1.0//EN"
+    "https://checkstyle.org/dtds/suppressions_1_0.dtd">
+<suppressions>
+
+    <!-- Generated code: skip everything -->
+    <suppress files="[\\/]generated[\\/]" checks=".*" />
+    <suppress files="[\\/]generated-sources[\\/]" checks=".*" />
+
+    <!--
+        The rules below are suppressed because RefineJ is not part of the Spring project.
+        spring-javaformat:validate still enforces code formatting (whitespace, indentation,
+        import order) for all source files — the suppressions here only relax the stricter
+        Javadoc / style rules that Spring uses for the framework itself.
+    -->
+
+    <!-- No Spring copyright header required -->
+    <suppress checks="SpringHeader" files=".*\.java" />
+
+    <!-- No package-info.java required -->
+    <suppress checks="JavadocPackage" files=".*\.java" />
+
+    <!-- No @author/@param required on type-level Javadoc -->
+    <suppress checks="JavadocType" files=".*\.java" />
+
+    <!-- No Javadoc required on every method -->
+    <suppress checks="MissingJavadocMethod" files=".*\.java" />
+    <suppress checks="JavadocMethod" files=".*\.java" />
+
+    <!-- No Javadoc required on fields and enum constants -->
+    <suppress checks="JavadocVariable" files=".*\.java" />
+
+    <!-- Tabs are the indentation character used by spring-javaformat -->
+    <suppress checks="FileTabCharacter" files=".*\.java" />
+
+    <!-- 80-char limit is too strict; spring-javaformat enforces its own wrapping -->
+    <suppress checks="LineLength" files=".*\.java" />
+
+    <!-- final on every parameter is not required in this project -->
+    <suppress checks="FinalParameters" files=".*\.java" />
+
+</suppressions>

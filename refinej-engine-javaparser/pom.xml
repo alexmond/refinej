@@ -13,6 +13,10 @@
     <artifactId>refinej-engine-javaparser</artifactId>
     <name>Refinej-engine-javaparser</name>
 
+    <properties>
+        <checkstyle.skip>false</checkstyle.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.github.javaparser</groupId>

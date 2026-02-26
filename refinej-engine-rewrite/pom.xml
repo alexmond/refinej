@@ -13,6 +13,10 @@
     <artifactId>refinej-engine-rewrite</artifactId>
     <name>Refinej-engine-rewrite</name>
 
+    <properties>
+        <checkstyle.skip>false</checkstyle.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.openrewrite</groupId>
