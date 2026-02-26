@@ -1,6 +1,7 @@
 package org.alexmond.refinej.cli;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
 
 import org.alexmond.refinej.core.engine.api.BuildType;
@@ -29,7 +30,7 @@ class EngineContractTests {
 	private static final Path FIXTURE_ROOT = Path.of("src/test/resources/fixtures/simple");
 
 	static Stream<Arguments> allEngines() {
-		return Stream.of(Arguments.of("SpoonEngine", new SpoonEngine()),
+		return Stream.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of())),
 				Arguments.of("OpenRewriteEngine", new OpenRewriteEngine()),
 				Arguments.of("JavaParserEngine", new JavaParserEngine()));
 	}
