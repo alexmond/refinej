@@ -1,16 +1,23 @@
 package org.alexmond.refinej.engine.spoon;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.alexmond.refinej.core.domain.ChangeSet;
 import org.alexmond.refinej.core.domain.Reference;
 import org.alexmond.refinej.core.domain.Symbol;
 import org.alexmond.refinej.core.engine.api.BuildType;
+import org.alexmond.refinej.core.engine.api.ClasspathResolver;
 import org.alexmond.refinej.core.engine.api.EngineType;
 import org.alexmond.refinej.core.engine.api.RefactoringEngine;
+import spoon.Launcher;
 
 import org.springframework.stereotype.Component;
 
@@ -18,16 +25,29 @@ import org.springframework.stereotype.Component;
  * Spoon-based implementation of {@link RefactoringEngine}.
  *
  * <p>
- * Phase 1: stub — safe no-ops for lifecycle methods, throws for compute/apply. Full
- * implementation: Phase 2 (RFJ-020–025) + Phase 4 (RFJ-040–041).
+ * Phase 2: full indexing via Spoon {@link Launcher}. Symbols and references are held in
+ * in-memory maps until Phase 3 wires in the JPA persistence layer.
  */
 @Slf4j
 @Component
 public class SpoonEngine implements RefactoringEngine {
 
-	private List<Symbol> indexedSymbols = List.of();
+	private final ClasspathResolver classpathResolver;
 
-	private List<Reference> indexedReferences = List.of();
+	/** In-memory symbol store (qualifiedName → Symbol). Replaced by JPA in Phase 3. */
+	private Map<String, Symbol> symbolsByFqn = new HashMap<>();
+
+	/** In-memory reference store (symbolId → References). Replaced by JPA in Phase 3. */
+	private Map<Long, List<Reference>> referencesBySymbolId = new HashMap<>();
+
+	/** References indexed by filePath for fast {@link #findReferencesInFile} queries. */
+	private Map<String, List<Reference>> referencesByFile = new HashMap<>();
+
+	private final AtomicLong idSequence = new AtomicLong(1);
+
+	public SpoonEngine(ClasspathResolver classpathResolver) {
+		this.classpathResolver = classpathResolver;
+	}
 
 	@Override
 	public EngineType getType() {
@@ -36,25 +56,66 @@ public class SpoonEngine implements RefactoringEngine {
 
 	@Override
 	public void indexProject(Path projectRoot, BuildType buildType) {
-		log.info("[SpoonEngine] indexProject called — not yet implemented (RFJ-020)");
-		// TODO RFJ-020: build Spoon CtModel and extract symbols + references
+		log.info("[SpoonEngine] Indexing {} (build: {})", projectRoot, buildType);
+
+		List<Path> classpath = this.classpathResolver.resolve(projectRoot, buildType);
+		boolean noClasspath = classpath.isEmpty();
+		if (noClasspath) {
+			log.warn("[SpoonEngine] No classpath resolved — symbol resolution will be partial");
+		}
+
+		Launcher launcher = new Launcher();
+		Path srcMain = projectRoot.resolve("src/main/java");
+		Path srcRoot = srcMain.toFile().isDirectory() ? srcMain : projectRoot;
+		launcher.addInputResource(srcRoot.toString());
+		launcher.getEnvironment().setSourceClasspath(classpath.stream().map(Path::toString).toArray(String[]::new));
+		launcher.getEnvironment().setAutoImports(true);
+		launcher.getEnvironment().setNoClasspath(noClasspath);
+		launcher.getEnvironment().setComplianceLevel(17);
+		launcher.getEnvironment().setCommentEnabled(false);
+
+		var model = launcher.buildModel();
+
+		SymbolExtractor symbolExtractor = new SymbolExtractor(this.idSequence);
+		model.getRootPackage().accept(symbolExtractor);
+		List<Symbol> extractedSymbols = symbolExtractor.getSymbols();
+
+		Map<String, Symbol> newSymbolsByFqn = new HashMap<>();
+		extractedSymbols.forEach((s) -> newSymbolsByFqn.put(s.qualifiedName(), s));
+
+		ReferenceExtractor refExtractor = new ReferenceExtractor(newSymbolsByFqn, this.idSequence);
+		model.getRootPackage().accept(refExtractor);
+		List<Reference> extractedRefs = refExtractor.getReferences();
+
+		Map<Long, List<Reference>> newRefsBySymbolId = new HashMap<>();
+		Map<String, List<Reference>> newRefsByFile = new HashMap<>();
+		for (Reference ref : extractedRefs) {
+			newRefsBySymbolId.computeIfAbsent(ref.symbol().id(), (k) -> new ArrayList<>()).add(ref);
+			if (ref.filePath() != null) {
+				newRefsByFile.computeIfAbsent(ref.filePath(), (k) -> new ArrayList<>()).add(ref);
+			}
+		}
+
+		this.symbolsByFqn = newSymbolsByFqn;
+		this.referencesBySymbolId = newRefsBySymbolId;
+		this.referencesByFile = newRefsByFile;
+
+		log.info("[SpoonEngine] Indexed {} symbols, {} references", extractedSymbols.size(), extractedRefs.size());
 	}
 
 	@Override
 	public Optional<Symbol> findSymbol(String qualifiedName) {
-		return this.indexedSymbols.stream().filter((s) -> s.qualifiedName().equals(qualifiedName)).findFirst();
+		return Optional.ofNullable(this.symbolsByFqn.get(qualifiedName));
 	}
 
 	@Override
 	public List<Reference> findReferences(Symbol symbol) {
-		return this.indexedReferences.stream()
-			.filter((r) -> r.symbol().qualifiedName().equals(symbol.qualifiedName()))
-			.toList();
+		return this.referencesBySymbolId.getOrDefault(symbol.id(), List.of());
 	}
 
 	@Override
 	public List<Reference> findReferencesInFile(Path filePath) {
-		return this.indexedReferences.stream().filter((r) -> filePath.toString().equals(r.filePath())).toList();
+		return this.referencesByFile.getOrDefault(filePath.toAbsolutePath().toString(), List.of());
 	}
 
 	@Override
@@ -74,19 +135,24 @@ public class SpoonEngine implements RefactoringEngine {
 
 	@Override
 	public void clearIndex() {
-		this.indexedSymbols = List.of();
-		this.indexedReferences = List.of();
+		this.symbolsByFqn = new HashMap<>();
+		this.referencesBySymbolId = new HashMap<>();
+		this.referencesByFile = new HashMap<>();
+		this.idSequence.set(1);
 		log.info("[SpoonEngine] Index cleared");
 	}
 
 	@Override
 	public List<Symbol> getAllSymbols() {
-		return this.indexedSymbols;
+		return List.copyOf(this.symbolsByFqn.values());
 	}
 
 	@Override
 	public List<Reference> getAllReferences() {
-		return this.indexedReferences;
+		return this.referencesBySymbolId.values()
+			.stream()
+			.flatMap(List::stream)
+			.collect(Collectors.toUnmodifiableList());
 	}
 
 }
