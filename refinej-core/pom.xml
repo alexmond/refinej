@@ -13,6 +13,10 @@
     <artifactId>refinej-core</artifactId>
     <name>Refinej-core</name>
 
+    <properties>
+        <checkstyle.skip>false</checkstyle.skip>
+    </properties>
+
     <dependencies>
         <!-- Spring Boot Starter: brings spring-context, logging (SLF4J+Logback), autoconfigure -->
         <dependency>

@@ -26,20 +26,153 @@
 
     <properties>
         <java.version>21</java.version>
+
+        <!-- Engine library versions -->
         <spoon.version>10.4.0</spoon.version>
         <openrewrite.version>8.73.2</openrewrite.version>
         <javaparser.version>3.25.8</javaparser.version>
+
+        <!-- Build tool versions -->
+        <spring-javaformat.version>0.0.47</spring-javaformat.version>
+        <checkstyle.version>9.3</checkstyle.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
+
+        <!--
+            Set to true for the root POM (no sources) so checkstyle does not try
+            to load config from ${project.basedir}/../ which doesn't exist here.
+            Child modules override this to false in their own <properties>.
+        -->
+        <checkstyle.skip>true</checkstyle.skip>
     </properties>
 
     <build>
+        <pluginManagement>
+            <plugins>
+
+                <!-- ── Compiler ─────────────────────────────────────────── -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
+                    </configuration>
+                </plugin>
+
+                <!-- ── JaCoCo coverage ───────────────────────────────────── -->
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco-maven-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>jacoco-prepare-agent</id>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>jacoco-report</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!-- ── Spring Java Format ────────────────────────────────── -->
+                <plugin>
+                    <groupId>io.spring.javaformat</groupId>
+                    <artifactId>spring-javaformat-maven-plugin</artifactId>
+                    <version>${spring-javaformat.version}</version>
+                    <executions>
+                        <execution>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>validate</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!-- ── Checkstyle ────────────────────────────────────────── -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${maven-checkstyle-plugin.version}</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>io.spring.javaformat</groupId>
+                            <artifactId>spring-javaformat-checkstyle</artifactId>
+                            <version>${spring-javaformat.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                    <executions>
+                        <execution>
+                            <id>checkstyle-validation</id>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                            <configuration>
+                                <!--
+                                    All child modules are direct children of the root.
+                                    ${project.basedir}/.. therefore resolves to the project root.
+                                    POM-packaged modules (root) are auto-skipped by checkstyle.
+                                -->
+                                <configLocation>${project.basedir}/../config/checkstyle/checkstyle.xml</configLocation>
+                                <suppressionsLocation>${project.basedir}/../config/checkstyle/checkstyle-suppressions.xml</suppressionsLocation>
+                                <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!-- ── Spring Boot (cli module only) ────────────────────── -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+
+            </plugins>
+        </pluginManagement>
+
         <plugins>
+            <!-- Applied globally to all modules -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>io.spring.javaformat</groupId>
+                <artifactId>spring-javaformat-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
                 <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
+                    <!-- Controlled per-module; root POM skips via property default above -->
+                    <skip>${checkstyle.skip}</skip>
                 </configuration>
             </plugin>
         </plugins>

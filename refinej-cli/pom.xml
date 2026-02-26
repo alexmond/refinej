@@ -13,6 +13,10 @@
     <artifactId>refinej-cli</artifactId>
     <name>Refinej-cli</name>
 
+    <properties>
+        <checkstyle.skip>false</checkstyle.skip>
+    </properties>
+
     <dependencies>
         <!-- Spring Boot starter -->
         <dependency>
@@ -72,17 +76,10 @@
 
     <build>
         <plugins>
+            <!-- Repackage into an executable fat JAR -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
             </plugin>
         </plugins>
     </build>

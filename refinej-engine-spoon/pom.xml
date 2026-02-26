@@ -13,6 +13,10 @@
     <artifactId>refinej-engine-spoon</artifactId>
     <name>Refinej-engine-spoon</name>
 
+    <properties>
+        <checkstyle.skip>false</checkstyle.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>fr.inria.gforge.spoon</groupId>
