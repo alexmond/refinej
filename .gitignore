@@ -11,5 +11,8 @@ target/
 # RefineJ runtime index & backups
 .refinej/
 
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
 # OS
 .DS_Store

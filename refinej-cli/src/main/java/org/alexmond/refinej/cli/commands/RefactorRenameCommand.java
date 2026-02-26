@@ -1,0 +1,100 @@
+package org.alexmond.refinej.cli.commands;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.alexmond.refinej.core.domain.ChangeSet;
+import org.alexmond.refinej.core.domain.Symbol;
+import org.alexmond.refinej.core.engine.api.RefactoringEngine;
+import org.alexmond.refinej.core.exception.RefactorException;
+import org.alexmond.refinej.core.model.JsonDto;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
+import java.util.List;
+import java.util.concurrent.Callable;
+
+/**
+ * {@code refinej refactor rename} — rename a symbol across the project.
+ *
+ * <p>Phase 1: compute/apply throw {@link UnsupportedOperationException} until Phase 4 (RFJ-040).
+ */
+@Component
+@Command(
+        name = "rename",
+        description = "Rename a symbol across the project.",
+        mixinStandardHelpOptions = true
+)
+public class RefactorRenameCommand implements Callable<Integer> {
+
+    @Autowired
+    private EngineResolver engineResolver;
+
+    private final ObjectMapper objectMapper =
+            new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+
+    @Option(names = "--old", required = true, description = "Current fully-qualified name.")
+    private String oldFqn;
+
+    @Option(names = "--new", required = true, description = "New fully-qualified name.")
+    private String newFqn;
+
+    @Option(names = "--preview", defaultValue = "true", description = "Show diff without applying (default: true).")
+    private boolean preview;
+
+    @Option(names = "--yes", description = "Apply without confirmation prompt.")
+    private boolean yes;
+
+    @Option(names = "--engine", description = "Engine override: spoon | rewrite | javaparser.")
+    private String engine;
+
+    @Option(names = "--json", description = "Output as JSON.")
+    private boolean json;
+
+    @Override
+    public Integer call() {
+        RefactoringEngine eng = engineResolver.resolve(engine);
+        Symbol symbol = eng.findSymbol(oldFqn)
+                .orElseThrow(() -> new RefactorException.SymbolNotFoundException(oldFqn));
+
+        // TODO RFJ-040: throws UnsupportedOperationException until Phase 4
+        ChangeSet changeSet = eng.computeRename(symbol, newFqn);
+        printChangeSet(changeSet, "rename", oldFqn, newFqn);
+        return changeSet.hasConflicts() ? 1 : 0;
+    }
+
+    private void printChangeSet(ChangeSet cs, String op, String from, String to) {
+        if (json) {
+            List<JsonDto.ConflictItem> conflicts = cs.conflicts() == null ? List.of() :
+                    cs.conflicts().stream()
+                            .map(c -> new JsonDto.ConflictItem(
+                                    c.description(),
+                                    c.filePath() != null ? c.filePath().toString() : null,
+                                    c.line()))
+                            .toList();
+            String diffText = cs.changes().stream()
+                    .map(fc -> fc.unifiedDiff() != null ? fc.unifiedDiff() : "")
+                    .reduce("", String::concat);
+            try {
+                System.out.println(objectMapper.writeValueAsString(new JsonDto.RefactorResponse(
+                        cs.hasConflicts() ? "conflicts" : "ok",
+                        op, from, to, cs.filesAffected(),
+                        new JsonDto.PreviewSummary(diffText, cs.filesAffected() + " file(s) changed"),
+                        conflicts)));
+            } catch (Exception e) {
+                System.err.println("{\"status\":\"error\",\"message\":\"" + e.getMessage() + "\"}");
+            }
+            return;
+        }
+
+        if (cs.hasConflicts()) {
+            System.out.println("CONFLICTS detected — apply blocked:");
+            cs.conflicts().forEach(c -> System.out.println("  ✗ " + c.description()));
+        }
+        cs.changes().forEach(fc -> {
+            if (fc.unifiedDiff() != null) System.out.println(fc.unifiedDiff());
+        });
+        System.out.printf("%d file(s) would change%n", cs.filesAffected());
+    }
+}

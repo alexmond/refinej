@@ -1,10 +1,12 @@
+spring:
+  application:
+    name: refinej
+  main:
+    log-startup-info: false
+    banner-mode: "off"
 
 refinej:
-  default-engine: spoon
-  database:
-    url: jdbc:h2:file:./.refinej/index;DB_CLOSE_ON_EXIT=FALSE
-    username: sa
-    password: sa
+  default-engine: spoon       # spoon | rewrite | javaparser
   indexing:
     incremental: true
     parallel-threads: 8
@@ -12,7 +14,13 @@ refinej:
       - "**/target/**"
       - "**/build/**"
       - "**/node_modules/**"
+      - "**/.refinej/**"
   backup:
     enabled: true
     directory: .refinej/backups
     keep-days: 7
+
+logging:
+  level:
+    org.alexmond.refinej: INFO
+    root: WARN
