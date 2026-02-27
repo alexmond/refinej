@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.claude
+*.md
+!README.md
+docs/
+scripts/
+META-INF/
+**/src/
+**/target/surefire-reports/
+**/target/jacoco.exec
