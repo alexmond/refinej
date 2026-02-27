@@ -14,9 +14,12 @@ import org.alexmond.refinej.core.domain.ChangeSet;
 import org.alexmond.refinej.core.domain.Reference;
 import org.alexmond.refinej.core.domain.Symbol;
 import org.alexmond.refinej.core.engine.api.BuildType;
+import org.alexmond.refinej.core.engine.api.ChangeApplier;
 import org.alexmond.refinej.core.engine.api.ClasspathResolver;
 import org.alexmond.refinej.core.engine.api.EngineType;
 import org.alexmond.refinej.core.engine.api.RefactoringEngine;
+import org.alexmond.refinej.core.exception.RefactorException;
+import org.alexmond.refinej.core.util.DiffGenerator;
 import spoon.Launcher;
 
 import org.springframework.stereotype.Component;
@@ -34,6 +37,10 @@ public class SpoonEngine implements RefactoringEngine {
 
 	private final ClasspathResolver classpathResolver;
 
+	private final ChangeApplier changeApplier;
+
+	private final DiffGenerator diffGenerator;
+
 	/** In-memory symbol store (qualifiedName → Symbol). Replaced by JPA in Phase 3. */
 	private Map<String, Symbol> symbolsByFqn = new HashMap<>();
 
@@ -45,8 +52,10 @@ public class SpoonEngine implements RefactoringEngine {
 
 	private final AtomicLong idSequence = new AtomicLong(1);
 
-	public SpoonEngine(ClasspathResolver classpathResolver) {
+	public SpoonEngine(ClasspathResolver classpathResolver, ChangeApplier changeApplier, DiffGenerator diffGenerator) {
 		this.classpathResolver = classpathResolver;
+		this.changeApplier = changeApplier;
+		this.diffGenerator = diffGenerator;
 	}
 
 	@Override
@@ -120,17 +129,26 @@ public class SpoonEngine implements RefactoringEngine {
 
 	@Override
 	public ChangeSet computeRename(Symbol oldSymbol, String newQualifiedName) {
-		throw new UnsupportedOperationException("computeRename not yet implemented — see RFJ-040");
+		log.info("[SpoonEngine] Computing rename: {} → {}", oldSymbol.qualifiedName(), newQualifiedName);
+		return new SpoonRenameComputer(this.symbolsByFqn, this.referencesBySymbolId, this.diffGenerator)
+			.compute(oldSymbol, newQualifiedName);
 	}
 
 	@Override
 	public ChangeSet computeMove(Symbol symbol, String newPackageName) {
-		throw new UnsupportedOperationException("computeMove not yet implemented — see RFJ-041");
+		log.info("[SpoonEngine] Computing move: {} → {}", symbol.qualifiedName(), newPackageName);
+		return new SpoonMoveComputer(this.symbolsByFqn, this.referencesBySymbolId, this.diffGenerator).compute(symbol,
+				newPackageName);
 	}
 
 	@Override
 	public void apply(ChangeSet changeSet, boolean dryRun) {
-		throw new UnsupportedOperationException("apply not yet implemented — see RFJ-044");
+		try {
+			this.changeApplier.backupAndApply(changeSet.changes(), dryRun);
+		}
+		catch (java.io.IOException ex) {
+			throw new RefactorException.FileOperationException("Failed to apply changes", ex);
+		}
 	}
 
 	@Override
