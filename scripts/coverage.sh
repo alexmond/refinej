@@ -27,8 +27,10 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 MVN_ARGS="-f $ROOT_DIR/pom.xml verify"
 [[ -n "$MODULE" ]] && MVN_ARGS="$MVN_ARGS -pl $MODULE"
 
+MVN="$ROOT_DIR/mvnw"
+
 echo "▶ Running tests + JaCoCo..."
-"$SCRIPT_DIR/mvnw.sh" $MVN_ARGS 2>&1 | grep -E "Tests run:|BUILD"
+"$MVN" $MVN_ARGS 2>&1 | grep -E "Tests run:|BUILD"
 
 echo ""
 echo "── JaCoCo coverage summary ──────────────────────────────────────────"

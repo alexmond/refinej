@@ -5,7 +5,7 @@ argument-hint: <module-name> [test-class]
 Run tests for module `$ARGUMENTS`:
 
 ```bash
-cd /Users/alex.mondshain/IdeaProjects/refinej && ./scripts/mvnw.sh test -pl $ARGUMENTS
+cd /Users/alex.mondshain/IdeaProjects/refinej && ./mvnw test -pl $ARGUMENTS
 ```
 
 If a specific test class is provided as a second argument, add `-Dtest=<ClassName>`.

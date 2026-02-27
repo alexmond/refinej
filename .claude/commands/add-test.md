@@ -18,7 +18,7 @@ Add a test for: **$ARGUMENTS**
 4. Run the tests:
 
 ```bash
-cd /Users/alex.mondshain/IdeaProjects/refinej && ./scripts/mvnw.sh test -pl <module>
+cd /Users/alex.mondshain/IdeaProjects/refinej && ./mvnw test -pl <module>
 ```
 
 5. Confirm all tests pass (including pre-existing ones).

@@ -4,23 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Run
 
-No system `mvn` — use the project wrapper at `scripts/mvnw.sh`:
+Use the Maven Wrapper (`./mvnw`) — no system `mvn` required:
 
 ```bash
 # Build all modules (skip tests)
-./scripts/mvnw.sh clean install -DskipTests
+./mvnw clean install -DskipTests
 
 # Build + run all tests
-./scripts/mvnw.sh verify
+./mvnw verify
 
 # Run a single test class
-./scripts/mvnw.sh test -pl refinej-cli -Dtest=EngineContractTest
+./mvnw test -pl refinej-cli -Dtest=EngineContractTest
 
 # Run tests for one module
-./scripts/mvnw.sh test -pl refinej-cli
+./mvnw test -pl refinej-cli
 
 # Build executable JAR
-./scripts/mvnw.sh package -pl refinej-cli -DskipTests
+./mvnw package -pl refinej-cli -DskipTests
 java -jar refinej-cli/target/refinej-cli-0.1.0-SNAPSHOT.jar
 ```
 

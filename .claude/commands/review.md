@@ -34,7 +34,7 @@ git status
 
 4. Run the contract tests to verify:
 ```bash
-cd /Users/alex.mondshain/IdeaProjects/refinej && ./scripts/mvnw.sh test -pl refinej-cli -Dtest=EngineContractTest
+cd /Users/alex.mondshain/IdeaProjects/refinej && ./mvnw test -pl refinej-cli -Dtest=EngineContractTest
 ```
 
 5. Provide a structured review with: ✅ Good, ⚠️ Minor issue, ❌ Must fix.
