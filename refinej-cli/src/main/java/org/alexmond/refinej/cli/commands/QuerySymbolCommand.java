@@ -5,9 +5,9 @@ import java.util.concurrent.Callable;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.alexmond.refinej.core.domain.Symbol;
-import org.alexmond.refinej.core.engine.api.RefactoringEngine;
 import org.alexmond.refinej.core.exception.RefactorException;
 import org.alexmond.refinej.core.model.JsonDto;
+import org.alexmond.refinej.core.service.QueryService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -23,23 +23,19 @@ import org.springframework.stereotype.Component;
 public class QuerySymbolCommand implements Callable<Integer> {
 
 	@Autowired
-	private EngineResolver engineResolver;
+	private QueryService queryService;
 
 	private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
 	@Option(names = "--name", required = true, description = "Fully-qualified name of the symbol.")
 	private String name;
 
-	@Option(names = "--engine", description = "Engine override: spoon | rewrite | javaparser.")
-	private String engine;
-
 	@Option(names = "--json", description = "Output as JSON.")
 	private boolean json;
 
 	@Override
 	public Integer call() {
-		RefactoringEngine eng = this.engineResolver.resolve(this.engine);
-		Symbol symbol = eng.findSymbol(this.name)
+		Symbol symbol = this.queryService.findSymbol(this.name)
 			.orElseThrow(() -> new RefactorException.SymbolNotFoundException(this.name));
 
 		if (this.json) {

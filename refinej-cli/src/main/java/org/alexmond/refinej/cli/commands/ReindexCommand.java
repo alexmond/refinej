@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.alexmond.refinej.core.engine.api.BuildType;
 import org.alexmond.refinej.core.engine.api.RefactoringEngine;
 import org.alexmond.refinej.core.model.JsonDto;
+import org.alexmond.refinej.core.service.IndexingService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -25,6 +26,9 @@ public class ReindexCommand implements Callable<Integer> {
 
 	@Autowired
 	private EngineResolver engineResolver;
+
+	@Autowired
+	private IndexingService indexingService;
 
 	private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
@@ -53,30 +57,29 @@ public class ReindexCommand implements Callable<Integer> {
 		BuildType buildType = BuildType.detect(projectRoot);
 		RefactoringEngine eng = this.engineResolver.resolve(this.engine);
 
-		eng.clearIndex();
 		log.info("Re-indexing {} with engine {} (build: {})", projectRoot, eng.getType(), buildType);
 
-		long start = System.currentTimeMillis();
-		eng.indexProject(projectRoot, buildType);
-		long duration = System.currentTimeMillis() - start;
-
-		long symbols = eng.getAllSymbols().size();
-		long refs = eng.getAllReferences().size();
+		IndexingService.IndexingResult result = this.indexingService.index(eng, projectRoot, buildType);
 
 		if (this.json) {
-			try {
-				System.out.println(this.objectMapper.writeValueAsString(
-						new JsonDto.IndexResponse("ok", eng.getType().name().toLowerCase(), symbols, refs, duration)));
-			}
-			catch (Exception ex) {
-				System.err.println("{\"status\":\"error\",\"message\":\"" + ex.getMessage() + "\"}");
-			}
+			print(new JsonDto.IndexResponse("ok", eng.getType().name().toLowerCase(), result.symbolCount(),
+					result.referenceCount(), result.durationMs()));
 		}
 		else {
-			System.out.printf("Re-indexed %s in %dms using %s — %d symbols, %d references%n", projectRoot, duration,
-					eng.getType().name().toLowerCase(), symbols, refs);
+			System.out.printf("Re-indexed %s in %dms using %s — %d symbols, %d references%n", projectRoot,
+					result.durationMs(), eng.getType().name().toLowerCase(), result.symbolCount(),
+					result.referenceCount());
 		}
 		return 0;
+	}
+
+	private void print(Object obj) {
+		try {
+			System.out.println(this.objectMapper.writeValueAsString(obj));
+		}
+		catch (Exception ex) {
+			System.err.println("{\"status\":\"error\",\"message\":\"" + ex.getMessage() + "\"}");
+		}
 	}
 
 }

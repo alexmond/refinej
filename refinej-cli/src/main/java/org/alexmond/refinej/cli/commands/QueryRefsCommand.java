@@ -6,10 +6,9 @@ import java.util.concurrent.Callable;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.alexmond.refinej.core.domain.Reference;
-import org.alexmond.refinej.core.domain.Symbol;
-import org.alexmond.refinej.core.engine.api.RefactoringEngine;
-import org.alexmond.refinej.core.exception.RefactorException;
+import org.alexmond.refinej.core.domain.UsageKind;
 import org.alexmond.refinej.core.model.JsonDto;
+import org.alexmond.refinej.core.service.QueryService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -24,7 +23,7 @@ import org.springframework.stereotype.Component;
 public class QueryRefsCommand implements Callable<Integer> {
 
 	@Autowired
-	private EngineResolver engineResolver;
+	private QueryService queryService;
 
 	private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
@@ -34,22 +33,18 @@ public class QueryRefsCommand implements Callable<Integer> {
 	@Option(names = "--kind", description = "Filter by usage kind (e.g. METHOD_CALL, IMPORT).")
 	private String kind;
 
-	@Option(names = "--engine", description = "Engine override: spoon | rewrite | javaparser.")
-	private String engine;
-
 	@Option(names = "--json", description = "Output as JSON.")
 	private boolean json;
 
 	@Override
 	public Integer call() {
-		RefactoringEngine eng = this.engineResolver.resolve(this.engine);
-		Symbol symbol = eng.findSymbol(this.name)
-			.orElseThrow(() -> new RefactorException.SymbolNotFoundException(this.name));
-
-		List<Reference> refs = eng.findReferences(symbol);
+		List<Reference> refs;
 		if (this.kind != null && !this.kind.isBlank()) {
-			String upperKind = this.kind.toUpperCase();
-			refs = refs.stream().filter((r) -> r.usageKind().name().equals(upperKind)).toList();
+			UsageKind usageKind = UsageKind.valueOf(this.kind.toUpperCase());
+			refs = this.queryService.findReferences(this.name, usageKind);
+		}
+		else {
+			refs = this.queryService.findReferences(this.name);
 		}
 
 		if (this.json) {

@@ -14,5 +14,8 @@ target/
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
 
+# Build artifacts
+META-INF/
+
 # OS
 .DS_Store
