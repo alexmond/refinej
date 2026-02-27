@@ -33,8 +33,9 @@ class EngineContractTests {
 	static Stream<Arguments> allEngines() {
 		return Stream
 			.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
-			}, new DiffGenerator())), Arguments.of("OpenRewriteEngine", new OpenRewriteEngine()),
-					Arguments.of("JavaParserEngine", new JavaParserEngine()));
+			}, new DiffGenerator())), Arguments.of("OpenRewriteEngine",
+					new OpenRewriteEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
+					}, new DiffGenerator())), Arguments.of("JavaParserEngine", new JavaParserEngine()));
 	}
 
 	// -------------------------------------------------------------------------
