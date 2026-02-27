@@ -18,10 +18,6 @@ import org.springframework.stereotype.Component;
 
 /**
  * {@code refinej refactor rename} — rename a symbol across the project.
- *
- * <p>
- * Phase 1: compute/apply throw {@link UnsupportedOperationException} until Phase 4
- * (RFJ-040).
  */
 @Component
 @Command(name = "rename", description = "Rename a symbol across the project.", mixinStandardHelpOptions = true)
@@ -56,9 +52,19 @@ public class RefactorRenameCommand implements Callable<Integer> {
 		Symbol symbol = eng.findSymbol(this.oldFqn)
 			.orElseThrow(() -> new RefactorException.SymbolNotFoundException(this.oldFqn));
 
-		// TODO RFJ-040: throws UnsupportedOperationException until Phase 4
 		ChangeSet changeSet = eng.computeRename(symbol, this.newFqn);
 		printChangeSet(changeSet, "rename", this.oldFqn, this.newFqn);
+
+		// Apply changes if --yes is set and there are no conflicts
+		if (this.yes && !changeSet.hasConflicts()) {
+			eng.apply(changeSet, false);
+			System.out.println("Applied rename successfully.");
+		}
+		else if (!this.preview && !changeSet.hasConflicts()) {
+			eng.apply(changeSet, false);
+			System.out.println("Applied rename successfully.");
+		}
+
 		return changeSet.hasConflicts() ? 1 : 0;
 	}
 
@@ -86,7 +92,7 @@ public class RefactorRenameCommand implements Callable<Integer> {
 
 		if (cs.hasConflicts()) {
 			System.out.println("CONFLICTS detected — apply blocked:");
-			cs.conflicts().forEach((c) -> System.out.println("  ✗ " + c.description()));
+			cs.conflicts().forEach((c) -> System.out.println("  * " + c.description()));
 		}
 		cs.changes()
 			.stream()

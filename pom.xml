@@ -32,6 +32,9 @@
         <openrewrite.version>8.73.2</openrewrite.version>
         <javaparser.version>3.25.8</javaparser.version>
 
+        <!-- Utility library versions -->
+        <java-diff-utils.version>4.12</java-diff-utils.version>
+
         <!-- Build tool versions -->
         <spring-javaformat.version>0.0.47</spring-javaformat.version>
         <checkstyle.version>9.3</checkstyle.version>

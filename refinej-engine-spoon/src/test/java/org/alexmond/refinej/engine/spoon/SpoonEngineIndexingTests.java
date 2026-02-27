@@ -9,6 +9,7 @@ import org.alexmond.refinej.core.domain.Symbol;
 import org.alexmond.refinej.core.domain.SymbolKind;
 import org.alexmond.refinej.core.domain.UsageKind;
 import org.alexmond.refinej.core.engine.api.BuildType;
+import org.alexmond.refinej.core.util.DiffGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,8 @@ class SpoonEngineIndexingTests {
 
 	@BeforeEach
 	void setUp() {
-		this.engine = new SpoonEngine(new StubClasspathResolver());
+		this.engine = new SpoonEngine(new StubClasspathResolver(), (changes, dryRun) -> {
+		}, new DiffGenerator());
 		this.engine.indexProject(FIXTURE_ROOT, BuildType.UNKNOWN);
 	}
 

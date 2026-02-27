@@ -18,10 +18,6 @@ import org.springframework.stereotype.Component;
 
 /**
  * {@code refinej refactor move} — move a class to a new package.
- *
- * <p>
- * Phase 1: compute/apply throw {@link UnsupportedOperationException} until Phase 4
- * (RFJ-041).
  */
 @Component
 @Command(name = "move", description = "Move a class to a new package.", mixinStandardHelpOptions = true)
@@ -56,10 +52,20 @@ public class RefactorMoveCommand implements Callable<Integer> {
 		Symbol symbol = eng.findSymbol(this.classFqn)
 			.orElseThrow(() -> new RefactorException.SymbolNotFoundException(this.classFqn));
 
-		// TODO RFJ-041: throws UnsupportedOperationException until Phase 4
 		ChangeSet changeSet = eng.computeMove(symbol, this.targetPackage);
 		String newFqn = this.targetPackage + "." + symbol.simpleName();
 		printChangeSet(changeSet, "move", this.classFqn, newFqn);
+
+		// Apply changes if --yes is set and there are no conflicts
+		if (this.yes && !changeSet.hasConflicts()) {
+			eng.apply(changeSet, false);
+			System.out.println("Applied move successfully.");
+		}
+		else if (!this.preview && !changeSet.hasConflicts()) {
+			eng.apply(changeSet, false);
+			System.out.println("Applied move successfully.");
+		}
+
 		return changeSet.hasConflicts() ? 1 : 0;
 	}
 
@@ -87,7 +93,7 @@ public class RefactorMoveCommand implements Callable<Integer> {
 
 		if (cs.hasConflicts()) {
 			System.out.println("CONFLICTS detected — apply blocked:");
-			cs.conflicts().forEach((c) -> System.out.println("  ✗ " + c.description()));
+			cs.conflicts().forEach((c) -> System.out.println("  * " + c.description()));
 		}
 		cs.changes()
 			.stream()

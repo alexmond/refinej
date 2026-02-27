@@ -30,6 +30,13 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <!-- Unified diff generation -->
+        <dependency>
+            <groupId>io.github.java-diff-utils</groupId>
+            <artifactId>java-diff-utils</artifactId>
+            <version>${java-diff-utils.version}</version>
+        </dependency>
+
         <!-- Lombok: @Slf4j, @RequiredArgsConstructor, @Builder etc. -->
         <dependency>
             <groupId>org.projectlombok</groupId>

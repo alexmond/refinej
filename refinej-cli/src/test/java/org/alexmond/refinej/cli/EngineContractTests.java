@@ -6,6 +6,7 @@ import java.util.stream.Stream;
 
 import org.alexmond.refinej.core.engine.api.BuildType;
 import org.alexmond.refinej.core.engine.api.RefactoringEngine;
+import org.alexmond.refinej.core.util.DiffGenerator;
 import org.alexmond.refinej.engine.javaparser.JavaParserEngine;
 import org.alexmond.refinej.engine.rewrite.OpenRewriteEngine;
 import org.alexmond.refinej.engine.spoon.SpoonEngine;
@@ -30,9 +31,10 @@ class EngineContractTests {
 	private static final Path FIXTURE_ROOT = Path.of("src/test/resources/fixtures/simple");
 
 	static Stream<Arguments> allEngines() {
-		return Stream.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of())),
-				Arguments.of("OpenRewriteEngine", new OpenRewriteEngine()),
-				Arguments.of("JavaParserEngine", new JavaParserEngine()));
+		return Stream
+			.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
+			}, new DiffGenerator())), Arguments.of("OpenRewriteEngine", new OpenRewriteEngine()),
+					Arguments.of("JavaParserEngine", new JavaParserEngine()));
 	}
 
 	// -------------------------------------------------------------------------
