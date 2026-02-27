@@ -44,16 +44,20 @@ class EngineContractTests {
 			.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
 			}, new DiffGenerator())), Arguments.of("OpenRewriteEngine",
 					new OpenRewriteEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
-					}, new DiffGenerator())), Arguments.of("JavaParserEngine", new JavaParserEngine()));
+					}, new DiffGenerator())), Arguments.of("JavaParserEngine",
+							new JavaParserEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
+							}, new DiffGenerator())));
 	}
 
-	/** Engines with full indexing + refactoring support (Spoon, OpenRewrite). */
+	/** Engines with full indexing + refactoring support (all 3 engines). */
 	static Stream<Arguments> implementedEngines() {
 		return Stream
 			.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
 			}, new DiffGenerator())), Arguments.of("OpenRewriteEngine",
 					new OpenRewriteEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
-					}, new DiffGenerator())));
+					}, new DiffGenerator())), Arguments.of("JavaParserEngine",
+							new JavaParserEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
+							}, new DiffGenerator())));
 	}
 
 	// =========================================================================

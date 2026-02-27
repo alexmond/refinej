@@ -15,6 +15,7 @@ import org.alexmond.refinej.core.domain.UsageKind;
 import org.alexmond.refinej.core.engine.api.BuildType;
 import org.alexmond.refinej.core.engine.api.RefactoringEngine;
 import org.alexmond.refinej.core.util.DiffGenerator;
+import org.alexmond.refinej.engine.javaparser.JavaParserEngine;
 import org.alexmond.refinej.engine.rewrite.OpenRewriteEngine;
 import org.alexmond.refinej.engine.spoon.SpoonEngine;
 import org.junit.jupiter.api.DisplayName;
@@ -48,7 +49,9 @@ class ComprehensiveIntegrationTests {
 			.of(Arguments.of("SpoonEngine", new SpoonEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
 			}, new DiffGenerator())), Arguments.of("OpenRewriteEngine",
 					new OpenRewriteEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
-					}, new DiffGenerator())));
+					}, new DiffGenerator())), Arguments.of("JavaParserEngine",
+							new JavaParserEngine((root, buildType) -> List.of(), (changes, dryRun) -> {
+							}, new DiffGenerator())));
 	}
 
 	// =========================================================================
