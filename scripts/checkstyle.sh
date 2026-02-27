@@ -25,17 +25,18 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 POM="-f $ROOT_DIR/pom.xml"
+MVN="$ROOT_DIR/mvnw"
 PL_ARG=""
 [[ -n "$MODULE" ]] && PL_ARG="-pl $MODULE"
 
 if [[ "$FIX" == "true" ]]; then
     echo "▶ Applying spring-javaformat..."
-    "$SCRIPT_DIR/mvnw.sh" $POM spring-javaformat:apply $PL_ARG
+    "$MVN" $POM spring-javaformat:apply $PL_ARG
     echo "  Done."
 fi
 
 echo "▶ Running Checkstyle + Spring Java Format validate..."
-"$SCRIPT_DIR/mvnw.sh" $POM validate $PL_ARG 2>&1 | \
+"$MVN" $POM validate $PL_ARG 2>&1 | \
     grep -E "\[ERROR\].*\.java|BUILD SUCCESS|BUILD FAILURE" | \
     grep -v "^\[ERROR\] Failed to execute" | head -50
 

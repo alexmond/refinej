@@ -4,7 +4,7 @@ description: Build all RefineJ modules (skipping tests). Use when you need to co
 Build the project by running:
 
 ```bash
-cd /Users/alex.mondshain/IdeaProjects/refinej && ./scripts/mvnw.sh clean install -DskipTests
+cd /Users/alex.mondshain/IdeaProjects/refinej && ./mvnw clean install -DskipTests
 ```
 
 Report the result. If the build fails, analyse the compiler errors and fix them before reporting back.

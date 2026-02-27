@@ -4,7 +4,7 @@ description: Run the RefactoringEngine contract test suite (EngineContractTest) 
 Run the engine contract tests:
 
 ```bash
-cd /Users/alex.mondshain/IdeaProjects/refinej && ./scripts/mvnw.sh test -pl refinej-cli -Dtest=EngineContractTest
+cd /Users/alex.mondshain/IdeaProjects/refinej && ./mvnw test -pl refinej-cli -Dtest=EngineContractTest
 ```
 
 The contract test runs the same assertions against SpoonEngine, OpenRewriteEngine, and JavaParserEngine.
