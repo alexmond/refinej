@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.alexmond.refinej.core.engine.api.BuildType;
 import org.alexmond.refinej.core.engine.api.RefactoringEngine;
 import org.alexmond.refinej.core.model.JsonDto;
+import org.alexmond.refinej.core.service.IndexingService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -16,16 +17,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * {@code refinej index} — scan a Java project and build an in-memory symbol index.
+ * {@code refinej index} — scan a Java project, build the symbol index, and persist it to
+ * the local database.
  */
 @Slf4j
 @Component
-@Command(name = "index", description = "Index a Java project to build the symbol index.",
+@Command(name = "index", description = "Index a Java project and persist the symbol index.",
 		mixinStandardHelpOptions = true)
 public class IndexCommand implements Callable<Integer> {
 
 	@Autowired
 	private EngineResolver engineResolver;
+
+	@Autowired
+	private IndexingService indexingService;
 
 	private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
@@ -47,19 +52,16 @@ public class IndexCommand implements Callable<Integer> {
 
 		log.info("Indexing {} with engine {} (build: {})", projectRoot, eng.getType(), buildType);
 
-		long start = System.currentTimeMillis();
-		eng.indexProject(projectRoot, buildType);
-		long duration = System.currentTimeMillis() - start;
-
-		long symbols = eng.getAllSymbols().size();
-		long refs = eng.getAllReferences().size();
+		IndexingService.IndexingResult result = this.indexingService.index(eng, projectRoot, buildType);
 
 		if (this.json) {
-			print(new JsonDto.IndexResponse("ok", eng.getType().name().toLowerCase(), symbols, refs, duration));
+			print(new JsonDto.IndexResponse("ok", eng.getType().name().toLowerCase(), result.symbolCount(),
+					result.referenceCount(), result.durationMs()));
 		}
 		else {
-			System.out.printf("Indexed %s in %dms using %s — %d symbols, %d references%n", projectRoot, duration,
-					eng.getType().name().toLowerCase(), symbols, refs);
+			System.out.printf("Indexed %s in %dms using %s — %d symbols, %d references%n", projectRoot,
+					result.durationMs(), eng.getType().name().toLowerCase(), result.symbolCount(),
+					result.referenceCount());
 		}
 		return 0;
 	}
