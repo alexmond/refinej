@@ -4,8 +4,8 @@
 == Overview
 
 RefineJ supports three Java refactoring engines behind the `RefactoringEngine` interface.
-This document compares them by complexity, functionality, and suitability as the single
-production engine.
+All three are now fully implemented. This document compares them by complexity,
+functionality, Lombok handling, and suitability as the single production engine.
 
 == Implementation Status
 
@@ -13,18 +13,18 @@ production engine.
 |===
 | Feature | SpoonEngine | OpenRewriteEngine | JavaParserEngine
 
-| indexProject       | ✅ Full  | ✅ Full  | ❌ Stub
-| findSymbol         | ✅ Full  | ✅ Full  | ❌ Stub
-| getAllSymbols       | ✅ Full  | ✅ Full  | ❌ Stub
-| findReferences     | ✅ Full  | ✅ Full  | ❌ Stub
-| computeRename      | ✅ Full  | ✅ Full  | ❌ Stub
-| computeMove        | ✅ Full  | ✅ Full  | ❌ Stub
-| apply              | ✅ Full  | ✅ Full  | ❌ Stub
+| indexProject       | ✅ Full  | ✅ Full  | ✅ Full
+| findSymbol         | ✅ Full  | ✅ Full  | ✅ Full
+| getAllSymbols       | ✅ Full  | ✅ Full  | ✅ Full
+| findReferences     | ✅ Full  | ✅ Full  | ✅ Full
+| computeRename      | ✅ Full  | ✅ Full  | ✅ Full
+| computeMove        | ✅ Full  | ✅ Full  | ✅ Full
+| apply              | ✅ Full  | ✅ Full  | ✅ Full
 |===
 
 == Complexity Comparison
 
-=== SpoonEngine (~800 lines total)
+=== SpoonEngine (~800 lines, 5 classes)
 
 [cols="1,1"]
 |===
@@ -39,9 +39,9 @@ production engine.
 
 *Complexity*: Medium. Spoon provides a rich, well-documented AST (`CtModel`) with
 excellent position tracking (`getPosition().getLine()`). The `CtScanner` visitor pattern
-is clean and predictable.
+is clean and predictable. Compliance level capped at 17 (Spoon 10.4.0 doesn't support 21).
 
-=== OpenRewriteEngine (~900 lines total)
+=== OpenRewriteEngine (~900 lines, 5 classes)
 
 [cols="1,1"]
 |===
@@ -60,166 +60,314 @@ requires manual source-text search since line numbers aren't directly accessible
 LST nodes. The `JavaIsoVisitor` pattern works but has quirks (e.g., annotation types
 return `NameTree` not `TypeTree`).
 
-=== JavaParserEngine (stub only)
+=== JavaParserEngine (~810 lines, 5 classes)
 
-Not yet implemented. JavaParser 3.x is the lightest library (~2 MB JAR) with good
-docs, but its symbol solver requires explicit classpath configuration and can be fragile.
+[cols="1,1"]
+|===
+| Component | Lines
+
+| JavaParserEngine.java         | ~160
+| JPSymbolExtractor.java        | ~140
+| JPReferenceExtractor.java     | ~226
+| JPRenameComputer.java         | ~146
+| JPMoveComputer.java           | ~137
+|===
+
+*Complexity*: Medium. JavaParser has a clean `VoidVisitorAdapter` pattern with direct
+AST node types (`ClassOrInterfaceDeclaration`, `MethodDeclaration`, etc.). The
+`JavaSymbolSolver` provides type resolution but requires explicit solver configuration.
+Language level capped at JAVA_17 (3.25.8 doesn't support JAVA_21 constant).
 
 == Functional Comparison
 
 === Symbol Extraction Quality
 
-[cols="1,1,1"]
+[cols="1,1,1,1"]
 |===
-| Aspect | Spoon | OpenRewrite
+| Aspect | Spoon | OpenRewrite | JavaParser
 
 | Position accuracy
 | Exact (native API)
 | Approximate (text search)
+| Exact (native API)
 
 | Method FQN format
 | `Class#method(param1,param2)` — reliable
 | `Class#method(param1,param2)` — relies on `JavaType.Method`
+| `Class#method(param1,param2)` — simple name types (not FQN)
 
 | Field detection
 | Robust (`CtField` visitor)
 | Manual iteration of class body statements
+| Clean (`FieldDeclaration` visitor with `VariableDeclarator` iteration)
 
 | Package symbols
 | `visitPackage()` callback
 | `visitPackage()` callback
+| `visit(PackageDeclaration)` callback
+
+| Nested type support
+| Full (via `CtType` hierarchy)
+| Full (via `J.ClassDeclaration` nesting)
+| Full (via `getParentNode()` traversal)
 |===
 
 === Reference Extraction Quality
 
-Both engines extract the same 8 `UsageKind` types:
+All three engines extract the same 8 `UsageKind` types:
 IMPORT, EXTENDS, IMPLEMENTS, NEW_INSTANCE, METHOD_CALL, FIELD_ACCESS, TYPE_REFERENCE, ANNOTATION.
 
-[cols="1,1,1"]
+[cols="1,1,1,1"]
 |===
-| Aspect | Spoon | OpenRewrite
+| Aspect | Spoon | OpenRewrite | JavaParser
 
 | Line number accuracy
 | Exact
 | Approximate (±1 line possible)
+| Exact
+
+| Annotation handling
+| `CtAnnotation` with `getAnnotationType()`
+| `NameTree` workaround (not `TypeTree`)
+| Concrete subtypes (`MarkerAnnotationExpr`, etc.)
+
+| Method call resolution
+| `CtInvocation.getExecutable()` — FQN prefix match
+| `J.MethodInvocation` — `JavaType.Method` resolution
+| `MethodCallExpr.resolve()` — full symbol solver
+
+| Symbol solver fallback
+| No-classpath mode (reduced accuracy)
+| Graceful skip on resolution failure
+| Simple-name matching fallback for types
 
 | Deduplication
-| Set-based key
-| Set-based key (identical approach)
+| Set-based key (fqn+file+line+col+kind)
+| Set-based key (identical)
+| Set-based key (identical)
 
 | Cross-package refs
 | Reliable
 | Reliable
+| Reliable (with solver); fallback for same-package
 |===
 
 === Rename/Move Quality
 
-Both engines use **identical** text-based rename/move computers. The computers operate on
-the indexed symbol/reference maps, not on engine-specific ASTs. This means rename and move
-quality is identical between engines — the difference is only in indexing quality.
+All three engines use **identical** text-based rename/move computers. The computers operate
+on the indexed symbol/reference maps, not on engine-specific ASTs. This means rename and
+move quality is identical between engines — the difference is only in indexing quality.
 
-NOTE: This is a code duplication smell. `SpoonRenameComputer` and `RewriteRenameComputer`
-(and their Move counterparts) are nearly identical. They should be extracted to
-`refinej-core` as shared utilities.
+NOTE: This is a code duplication smell. `SpoonRenameComputer`, `RewriteRenameComputer`, and
+`JPRenameComputer` (and their Move counterparts) are nearly identical. They should be
+extracted to `refinej-core` as shared utilities.
 
 == Performance
 
-From the integration test performance sanity checks:
+From the CI test execution times:
 
-[cols="1,1,1"]
+[cols="1,1,1,1"]
 |===
-| Operation | Spoon | OpenRewrite
+| Operation | Spoon | OpenRewrite | JavaParser
+
+| Index simple fixture (2 files)
+| ~0.2s
+| ~1.6s
+| ~0.5s
 
 | Index complex fixture (7 files)
 | ~1-2s
 | ~2-3s
+| ~0.5-1s
 
-| Rename (User → Account)
+| Rename (7 files)
 | <100ms
 | <100ms
+| <100ms
+
+| 8 indexing tests
+| ~0.2s
+| ~1.6s
+| ~0.5s
+
+| 13 refactoring tests
+| ~1.3s
+| ~0.9s
+| ~0.2s
 |===
 
-OpenRewrite's parser startup is heavier because it loads the full rewrite infrastructure.
-For a CLI tool processing single projects, this difference is negligible.
+JavaParser has the **fastest** startup and parsing by a significant margin. OpenRewrite
+is the slowest due to heavy infrastructure loading. Spoon is in the middle.
 
 == Dependency Footprint
 
-[cols="1,1,1"]
+[cols="1,1,1,1"]
 |===
-| Aspect | Spoon | OpenRewrite
+| Aspect | Spoon | OpenRewrite | JavaParser
 
 | Core JAR
 | ~6 MB (spoon-core)
 | ~4 MB (rewrite-java) + ~8 MB (rewrite-java-17)
+| ~2 MB (javaparser-symbol-solver-core)
 
 | Transitive deps
 | Eclipse JDT compiler
 | Jackson, Micrometer, multiple rewrite modules
+| Minimal (javassist for symbol solving)
 
 | Total footprint
 | ~15 MB
 | ~25 MB
+| ~5 MB
+
+| Language level
+| Java 17 (Spoon 10.4.0 limit)
+| Java 17 (via rewrite-java-17)
+| Java 17 (3.25.8 constant limit)
 |===
 
-== Recommendation
+== Lombok Handling
 
-=== Keep: SpoonEngine (Primary)
+Lombok presents a significant challenge for all three engines because it generates
+code at compile time that doesn't exist in the source AST.
 
-**Reasons:**
+=== The Problem
 
-1. **Better position tracking** — native `getPosition().getLine()` vs source-text search.
-   This becomes critical for accurate rename/move in larger codebases.
-2. **Smaller dependency footprint** — ~15 MB vs ~25 MB, matters for CLI distribution.
-3. **Simpler API** — `CtScanner` with typed `visitCtClass`, `visitCtMethod`, etc. is more
-   intuitive than OpenRewrite's `JavaIsoVisitor` with manual type checking.
-4. **Battle-tested for this use case** — Spoon was specifically designed for source code
-   analysis and transformation, which is exactly what RefineJ does.
+Lombok annotations like `@Data`, `@Getter`, `@Setter`, `@Builder`, `@RequiredArgsConstructor`,
+and `@Slf4j` generate methods, constructors, and fields that are **not present** in the
+source code. This affects:
 
-=== Consider Dropping: OpenRewriteEngine
+1. **Symbol extraction**: Generated methods (e.g., `getName()`, `setName()`, `builder()`)
+   won't be found in the source AST
+2. **Reference extraction**: Calls to `user.getName()` reference a method that doesn't
+   exist in the parsed source
+3. **Rename safety**: Renaming a field `name` should also rename `getName()`/`setName()`,
+   but these methods don't exist in the AST
 
-**Reasons to drop:**
+=== Engine-Specific Lombok Issues
 
-- Adds ~10 MB to the distribution with no functional advantage
-- Position tracking workaround is fragile
-- Rename/move computers are duplicated (text-based, engine-agnostic)
-- OpenRewrite's strength (large-scale migrations across many repos) doesn't align
-  with RefineJ's use case (single-project refactoring)
+[cols="1,1,1,1"]
+|===
+| Issue | Spoon | OpenRewrite | JavaParser
 
-**Reasons to keep (if desired):**
+| Delombok support
+| ✅ Built-in via `SpoonModelBuilder.addProcessor(LombokAnnotationProcessor)`
+| ⚠️ Partial — OpenRewrite's Java parser handles some Lombok via JDK annotation processing
+| ❌ None — JavaParser sees raw source without generated code
 
-- OpenRewrite has a huge recipe ecosystem for automated migrations
-- Some users may prefer OpenRewrite's LST for custom recipes
-- Cross-engine validation catches bugs in either implementation
+| @Data / @Getter / @Setter
+| Spoon can process Lombok annotations to generate synthetic AST nodes
+| Resolves types through compiled class files if available
+| Cannot resolve generated methods; causes `UnsolvedSymbolException`
 
-=== Alternative: JavaParserEngine
+| @Builder
+| Handled with Lombok processor
+| Handles if compiled classes on classpath
+| Cannot resolve `Builder` inner class or `builder()` method
 
-If a second engine is desired for validation/comparison, **JavaParser** would be a
-better complement to Spoon than OpenRewrite:
+| @Slf4j / @Log
+| Spoon creates synthetic `log` field
+| Resolves through classpath
+| `log` field not in AST; field access fails
 
-- Much lighter (~2 MB)
-- Different parsing approach (hand-written parser vs Eclipse JDT)
-- Good position tracking
-- Active community
+| @RequiredArgsConstructor
+| Synthetic constructor added to model
+| Resolves through classpath
+| Constructor calls fail resolution
+
+| Impact on rename
+| Can rename `@Data` fields and track generated getter/setter
+| Only tracks what's in compiled bytecode
+| **Broken**: rename misses generated method call sites
+
+| Workaround
+| Use Spoon's Lombok processor (`spoon-decompiler` module)
+| Run `mvn compile` first so `.class` files exist on classpath
+| Run `delombok` as preprocessing step to expand annotations
+|===
+
+=== Severity
+
+- **SpoonEngine**: Low impact — has native Lombok support via processor
+- **OpenRewriteEngine**: Medium impact — works if classpath includes compiled classes
+- **JavaParserEngine**: **High impact** — fundamentally broken for Lombok-heavy projects
+  without a delombok preprocessing step
+
+== Recommendation (Updated)
+
+=== Recommended: Keep Spoon + JavaParser, Drop OpenRewrite
+
+After implementing all three engines and analyzing their characteristics:
+
+==== Keep: SpoonEngine (Primary)
+
+1. **Best Lombok support** — native annotation processor handles `@Data`, `@Builder`, etc.
+2. **Exact position tracking** — `getPosition().getLine()` from Eclipse JDT
+3. **Purpose-built for source analysis** — Spoon was specifically designed for this use case
+4. **Moderate startup time** — acceptable for CLI tool
+
+==== Keep: JavaParserEngine (Secondary/Validation)
+
+1. **Lightest footprint** — ~5 MB total vs ~15 MB (Spoon) and ~25 MB (OpenRewrite)
+2. **Fastest parsing** — significantly faster indexing than both alternatives
+3. **Good position tracking** — exact line/column from native API
+4. **Clean API** — `VoidVisitorAdapter` is intuitive and type-safe
+5. **Useful for validation** — different parser (hand-written vs Eclipse JDT) catches different bugs
+6. **Limitation**: Lombok support needs preprocessing or must be skipped
+
+==== Drop: OpenRewriteEngine
+
+1. **Largest footprint** — ~25 MB with many transitive dependencies
+2. **Slowest parsing** — heavy infrastructure loading on every index operation
+3. **Fragile position tracking** — source-text search is approximate
+4. **Wrong tool for the job** — OpenRewrite excels at large-scale migrations across many
+   repos; RefineJ does single-project refactoring
+5. **API quirks** — `NameTree` vs `TypeTree`, manual field detection, etc.
+6. **Middle-ground Lombok** — not as good as Spoon, not as fast as JavaParser
 
 == Migration Path
 
-If consolidating to Spoon only:
+=== Option A: Keep all three (current state)
 
-1. Extract rename/move computers to `refinej-core` as shared utilities
-2. Remove `refinej-engine-rewrite` module from the build
-3. Remove `refinej-engine-javaparser` module (or implement it as the second engine)
-4. Simplify `EngineConfig` to only load SpoonEngine
-5. Remove `--engine` CLI flag (or keep it for future extensibility)
-6. Update README, CLAUDE.md, and docs
+Pros: Maximum validation, user choice via `--engine` flag.
+Cons: Tripled maintenance, 3x code duplication in rename/move computers.
+
+=== Option B: Keep Spoon + JavaParser (recommended)
+
+1. Extract rename/move computers to `refinej-core` as shared `TextRenameComputer` / `TextMoveComputer`
+2. Delete `refinej-engine-rewrite` module from the build
+3. Update `EngineType` enum, `EngineConfig`, `EngineResolver`
+4. Remove OpenRewrite from parent POM `dependencyManagement`
+5. Update docs, README, CLAUDE.md
+6. ~25 MB reduction in distribution size
+
+=== Option C: Keep only Spoon
+
+1. Same as Option B, plus delete `refinej-engine-javaparser`
+2. Remove `--engine` CLI flag or keep for future extensibility
+3. Simplest maintenance, but loses cross-engine validation
+
+== Test Coverage Summary
+
+[cols="1,1,1,1"]
+|===
+| Test Suite | SpoonEngine | OpenRewriteEngine | JavaParserEngine
+
+| Dedicated indexing tests     | 8  | 8  | 8
+| Dedicated refactoring tests  | 13 | 13 | 13
+| Contract tests (shared)      | 47 (3 engines × all assertions)
+| Comprehensive integration    | 35 (3 engines × complex fixture)
+| **Total test assertions per engine** | ~34 | ~34 | ~34
+|===
+
+**Total: 152 tests pass across all modules.**
 
 == Decision Log
-
-_Record engine consolidation decisions here as they are made._
 
 |===
 | Date | Decision | Rationale
 
 | (pending)
 | (awaiting user decision)
-| See recommendation above
+| See recommendation above — suggest Option B (Spoon + JavaParser)
 |===
