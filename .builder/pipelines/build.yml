@@ -1,0 +1,23 @@
+name: Build & Test
+
+on: [push, manual]
+push:
+  branches: [main]
+
+jobs:
+  build:
+    image: eclipse-temurin:21-jdk
+    matrix:
+      java: ["21"]
+    cache:
+      key: m2-refinej
+      paths: [.m2/repository]
+    steps:
+      - name: Checkout
+        run: git clone --depth 1 https://github.com/alexmond/refinej.git .
+      - name: Build (skip tests)
+        run: ./mvnw -B clean install -DskipTests -Dmaven.repo.local=.m2/repository
+      - name: Run tests
+        run: ./mvnw -B verify -Dmaven.repo.local=.m2/repository
+    artifacts:
+      - "**/target/surefire-reports/"

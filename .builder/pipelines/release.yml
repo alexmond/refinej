@@ -1,0 +1,35 @@
+name: Release
+
+on: [tag, manual]
+
+inputs:
+  VERSION:
+    type: string
+    description: "Release version (without the leading v), e.g. 1.2.3"
+    required: true
+
+jobs:
+  build:
+    image: eclipse-temurin:21-jdk
+    cache:
+      key: m2-refinej
+      paths: [.m2/repository]
+    steps:
+      - name: Checkout
+        run: git clone --depth 1 https://github.com/alexmond/refinej.git .
+      - name: Set Maven version
+        run: ./mvnw -B versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false -Dmaven.repo.local=.m2/repository
+      - name: Build and test
+        run: ./mvnw -B verify -Dmaven.repo.local=.m2/repository
+    artifacts:
+      - "refinej-cli/target/refinej-cli-*.jar"
+
+  docker:
+    image: docker:27
+    needs: [build]
+    needs-artifacts: [build]
+    steps:
+      - name: Checkout
+        run: git clone --depth 1 https://github.com/alexmond/refinej.git .
+      - name: Build Docker image
+        run: docker build -t refinej:$VERSION .
