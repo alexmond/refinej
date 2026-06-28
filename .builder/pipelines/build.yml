@@ -1,6 +1,7 @@
 name: Build & Test
 
 on: [push, manual]
+checkout: true
 push:
   branches: [main]
 
@@ -13,8 +14,6 @@ jobs:
       key: m2-refinej
       paths: [.m2/repository]
     steps:
-      - name: Checkout
-        run: git clone --depth 1 https://github.com/alexmond/refinej.git .
       - name: Build (skip tests)
         run: ./mvnw -B clean install -DskipTests -Dmaven.repo.local=.m2/repository
       - name: Run tests
