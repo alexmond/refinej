@@ -11,8 +11,10 @@ target/
 # RefineJ runtime index & backups
 .refinej/
 
-# Claude Code local settings (machine-specific)
+# Claude Code local settings & runtime state (machine-specific)
 .claude/settings.local.json
+.claude/settings.json
+.claude/prompt-coach/
 
 # Build artifacts
 META-INF/
