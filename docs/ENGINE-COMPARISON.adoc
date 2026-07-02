@@ -362,6 +362,133 @@ Cons: Tripled maintenance, 3x code duplication in rename/move computers.
 
 **Total: 152 tests pass across all modules.**
 
+== Candidate Fourth Engine: Compiler-Grade Backends
+
+The three current engines are all **in-process AST libraries** that RefineJ builds
+refactorings on top of. Two compiler-grade alternatives are worth evaluating because
+they solve — for free — the two hardest problems the current engines struggle with:
+full type/binding resolution, Lombok, and (critically) they are **not capped at Java 17**.
+
+Both are documented here as reference options for a future `JavacEngine` / `JdtEngine`
+PoC (see `ROADMAP.adoc`, Phase 7).
+
+=== Eclipse JDT (jdtls / JDT Core)
+
+**jdtls** (Eclipse JDT Language Server) is the LSP server that powers Java in VS Code,
+Neovim, etc. It is built on **Eclipse JDT Core** — the same industrial ECJ compiler and
+Java model (`ICompilationUnit`, `IType`, `IMethod`) used by the Eclipse IDE, and the same
+compiler Spoon already uses under the hood for parsing.
+
+==== Two integration surfaces
+
+[cols="1,3",options="header"]
+|===
+| Surface | Fit for RefineJ
+
+| **jdtls** (the LSP *server*)
+| Poor. It is a separate OSGi/Equinox process spoken to over LSP (JSON-RPC). A `JdtlsEngine`
+  would need an LSP client (LSP4J), process lifecycle management, and async→sync adaptation.
+  Heavy (~100+ MB server bundle + its own JDK), slow cold start (full workspace import/build),
+  and stateful — all of which fight RefineJ's one-shot CLI model.
+
+| **JDT Core** (the *library*)
+| Good. Embed `org.eclipse.jdt:org.eclipse.jdt.core` in-process (like Spoon/JavaParser). The
+  LTK refactoring framework (`org.eclipse.ltk`, `org.eclipse.jdt.core.manipulation`) produces
+  text edits directly, mapping cleanly to `ChangeSet`. Fiddly `IJavaProject` bootstrap outside
+  an Eclipse runtime, but no process boundary.
+|===
+
+==== Strengths vs. current engines
+
+- **Best-in-class type resolution** — full ECJ compiler bindings.
+- **Best real-world Lombok** — `-javaagent:lombok.jar`, the mechanism the actual compiler uses.
+- **Current Java** — JDT tracks 21/23/25; the current three are all capped at 17.
+- **Built-in refactoring** — rename/move/extract already exist and are battle-tested (unlike
+  Spoon/JP, where RefineJ hand-builds them). `WorkspaceEdit` → `ChangeSet` is ~1:1.
+
+==== Weaknesses
+
+- **Heaviest footprint** of any option (jdtls ~100+ MB; JDT Core still large).
+- **Wrong integration shape** for jdtls-the-server (process, async, stateful).
+- JDT Core outside Eclipse needs careful classpath/`IJavaProject` bootstrapping.
+
+**Takeaway**: if the goal is Eclipse-quality refactoring, use **JDT Core as a library**, not
+jdtls-the-server. jdtls only earns its cost if editor-grade LSP interop is itself a goal.
+
+=== javac Compiler Tree API (+ Kythe reference)
+
+The JDK's own compiler front-end: `javax.tools.JavaCompiler` plus the Compiler Tree API
+(`com.sun.source.tree`, `com.sun.source.util` — `Trees`, `TreePathScanner`, `Elements`,
+`Types`). Embeddable **in-process as a library**, exactly like Spoon and JavaParser. The
+well-known LSP built on it is `georgewfraser/java-language-server` (the lightweight
+alternative to jdtls — often mis-attributed to Google).
+
+==== Sketch of a `JavacEngine`
+
+`ToolProvider.getSystemJavaCompiler()` → `JavacTask` → `CompilationUnitTree`s → walk with a
+`TreePathScanner`, resolve each node via `Trees.getElement(path)` → map to `Symbol`/`Reference`.
+Positions come from `SourcePositions` / `LineMap` (exact). Fits the `RefactoringEngine`
+contract directly.
+
+==== Strengths — it dominates JavaParser
+
+[cols="1,2",options="header"]
+|===
+| Dimension | javac
+
+| Footprint        | **~0 MB — it ships in the JDK** (`jdk.compiler` module), lighter than JavaParser's ~5 MB
+| Java version     | **Tracks the running JDK** (21/25 native) — the only option not capped at Java 17
+| Type resolution  | Full — it *is* the compiler (`Element` / `TypeMirror`), on par with Spoon/JDT
+| Lombok           | Strong — javac is Lombok's native habitat (annotation processor on the AP classpath)
+| Process model    | In-process library — same shape as Spoon/JavaParser
+|===
+
+Net: same lightweight in-process feel as JavaParser, but with **real compiler bindings** and
+**current Java** instead of a partial symbol solver capped at 17.
+
+==== Weaknesses
+
+- **No built-in refactoring** — analysis-only; rename/move must be hand-built (same as today
+  for Spoon/JP). A great *index/resolve* backend, not a *transform* one.
+- **API discipline required** — stay on the public `com.sun.source.*` API. Reaching into
+  `com.sun.tools.javac.*` internals needs `--add-exports` and is fragile across JDK releases.
+- **Not lossless** — comments/formatting dropped, but RefineJ applies edits via text+positions,
+  so this doesn't bite.
+
+==== Kythe (Google's actual tool — reference only)
+
+Google's open-source semantic indexing infrastructure: a language-agnostic node/edge graph
+(defines/ref/childof) that powers Google-scale code search; its Java indexer is itself a javac
+plugin. Philosophically identical to RefineJ's symbol+reference index, but it is an **offline
+pipeline** (extract → index → serve), not an embeddable library or LSP server. Wrong shape to
+integrate — but a useful **reference model for the index graph schema**.
+
+=== Summary Ranking (as fourth-engine candidates)
+
+[cols="1,3",options="header"]
+|===
+| Candidate | Assessment
+
+| **javac Compiler Tree API**
+| **Strongest fit.** Lightest footprint, only option on current Java, real resolution,
+  in-process. Natural upgrade path from JavaParser. No built-in transforms (hand-build, as today).
+
+| **JDT Core (library)**
+| Strong for *refactoring quality* (built-in rename/move, best Lombok), at a heavy footprint and
+  a fiddly bootstrap. The "high-fidelity" option.
+
+| **jdtls (LSP server)**
+| Poor architectural fit — process boundary, async, ~100+ MB, slow cold start. Only if LSP
+  interop is itself a goal.
+
+| **Kythe**
+| Not an engine — a reference model for the index schema.
+|===
+
+**Recommendation for the PoC**: spike **`JavacEngine`** first (best fit, lightest, breaks the
+Java-17 ceiling); keep **JDT Core** as the fallback if compiler-grade *built-in* refactoring is
+wanted later.
+
 == Decision Log
 
 |===

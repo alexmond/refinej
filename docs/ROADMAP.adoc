@@ -146,6 +146,34 @@ End-to-end rename of a class in Petclinic succeeds with preview/apply and git di
 **Phase Exit Criteria**:
 v0.1.0 released, fully documented, and AI-agent friendly.
 
+== Phase 7: Compiler-Grade Engine PoC (Post-MVP | 6 person-days)
+
+Evaluate a fourth `RefactoringEngine` backed by a real Java compiler, to break the
+**Java-17 ceiling** shared by all three current engines (Spoon 10.4, JavaParser 3.25,
+OpenRewrite rewrite-java-17) and to get full type/binding resolution + first-class Lombok.
+
+Two reference backends are analysed in `docs/ENGINE-COMPARISON.adoc`
+("Candidate Fourth Engine: Compiler-Grade Backends"):
+
+* **javac Compiler Tree API** (`com.sun.source.*`) — in-process, ~0 MB (ships in the JDK),
+  tracks the running JDK version, real compiler bindings. **Recommended PoC target.**
+* **Eclipse JDT Core** (library, not the jdtls server) — built-in LTK rename/move and best
+  Lombok, at a heavier footprint. Fallback / "high-fidelity" option.
+
+[cols="1,4,1,1,2,1",options="header"]
+|===
+| ID      | Title                                      | Priority | Effort | Dependencies | Status
+| RFJ-070 | Spike `JavacEngine` in a new `refinej-engine-javac` module: `JavacTask` → `TreePathScanner` → `Symbol`/`Reference` mapping via `Trees.getElement`; public `com.sun.source.*` API only (no `--add-exports`) | P3 | 3d | Phase 4 | TODO
+| RFJ-071 | Wire `JavacEngine` into `EngineType`, `EngineConfig`, `EngineResolver`, `--engine javac`; pass `EngineContractTest` | P3 | 1d | RFJ-070 | TODO
+| RFJ-072 | Validate on a Java 21+ fixture (records, sealed, pattern switch) that current engines cannot index; confirm Lombok via annotation-processing classpath | P3 | 1d | RFJ-070 | TODO
+| RFJ-073 | Update `ENGINE-COMPARISON.adoc` with measured javac footprint/perf/resolution vs. the three engines; decide javac vs. JDT Core for a production fourth engine | P3 | 1d | RFJ-072 | TODO
+|===
+
+**Phase Exit Criteria**:
+`refinej --engine javac index <java21-fixture>` indexes source the other three engines cannot
+(capped at Java 17), passes the shared `EngineContractTest`, and the comparison doc records a
+go/no-go decision on promoting a compiler-grade engine.
+
 == How to Turn This Roadmap into Tickets
 
 1. Copy each row and create a GitHub issue with the exact **Title**.
