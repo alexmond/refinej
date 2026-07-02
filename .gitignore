@@ -19,3 +19,6 @@ META-INF/
 
 # OS
 .DS_Store
+
+# Claude Code prompt-coach local runtime state
+.claude/prompt-coach/
